@@ -1,4 +1,4 @@
-#HC History Collector
+# HC History Collector
 
 This is a simple Golang application designed to receive 
 and store command history data from remote clients. It 

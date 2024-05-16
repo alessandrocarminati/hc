@@ -1,0 +1,33 @@
+{
+  "RegexPrefix": "^[# ]*(sudo [ ]*){0,1}",
+  "TagsList": [
+    {"WPrefix": true, "Regex": "cd ", "TagStr": "directories"},
+    {"WPrefix": true, "Regex": "mkdir ", "TagStr": "directories"},
+    {"WPrefix": true, "Regex": "ls ", "TagStr": "directories"},
+    {"WPrefix": true, "Regex": "qemu-system", "TagStr": "qemu-system"},
+    {"WPrefix": true, "Regex": "qemu", "TagStr": "qemu"},
+    {"WPrefix": true, "Regex": "git ", "TagStr": "git"},
+    {"WPrefix": true, "Regex": "ip ", "TagStr": "net_mgmt"},
+    {"WPrefix": true, "Regex": "ss ", "TagStr": "net_mgmt"},
+    {"WPrefix": true, "Regex": "ifconfig ", "TagStr": "net_ngmt"},
+    {"WPrefix": true, "Regex": "ping ", "TagStr": "net_mgmt"},
+    {"WPrefix": true, "Regex": "cp ", "TagStr": "file_mgmt"},
+    {"WPrefix": true, "Regex": "rm ", "TagStr": "file_mgmt"},
+    {"WPrefix": true, "Regex": "ls ", "TagStr": "file_mgmt"},
+    {"WPrefix": true, "Regex": "ln ", "TagStr": "file_mgmt"},
+    {"WPrefix": true, "Regex": "ssh ", "TagStr": "remote_con"},
+    {"WPrefix": true, "Regex": "telnet ", "TagStr": "remote_con"},
+    {"WPrefix": true, "Regex": "vncviewer ", "TagStr": "remote_con"},
+    {"WPrefix": true, "Regex": "vi ", "TagStr": "edit"},
+    {"WPrefix": true, "Regex": "nano ", "TagStr": "edit"},
+    {"WPrefix": true, "Regex": "vim ", "TagStr": "edit"},
+    {"WPrefix": true, "Regex": "cat ", "TagStr": "file_mgmt"},
+    {"WPrefix": true, "Regex": "grep ", "TagStr": "search"},
+    {"WPrefix": true, "Regex": "find ", "TagStr": "search"},
+    {"WPrefix": true, "Regex": "l4h ", "TagStr": "search"},
+    {"WPrefix": true, "Regex": "ffmpeg ", "TagStr": "video_mgmt"},
+    {"WPrefix": false, "Regex": "/dev/", "TagStr": "device_opt"},
+    {"WPrefix": false, "Regex": "vnc", "TagStr": "remote_desktop"},
+    {"WPrefix": false, "Regex": "vnc", "TagStr": "vnc"}
+  ]
+}

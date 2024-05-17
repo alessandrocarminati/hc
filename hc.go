@@ -65,7 +65,7 @@ func receivedata(rd net.Conn, ch chan data) {
 	b := make([]byte, bufsiz)
 
 	for {
-		_ = rd.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		_ = rd.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 
 		m, err := rd.Read(b)
 
@@ -168,6 +168,24 @@ func do_search(h *History, type_, text string) string {
 			for i:= len(h.ParsedItems)-n; i<len(h.ParsedItems); i++ {
 				ret = ret + fmt.Sprintf("%s %08x - %s, ==> %s\n", h.ParsedItems[i].Date.Format("2006-01-02 15:04:05"), h.ParsedItems[i].SessionID, h.ParsedItems[i].HostName, h.ParsedItems[i].Command)
 			}
+		case "debug":
+			n, err := strconv.Atoi(text)
+			if err != nil {
+				ret = "error\n"
+				break
+			}
+			switch n {
+				case 0: DebugLevel = DebugNone
+				case 1: DebugLevel = Debug1
+				case 2: DebugLevel = Debug2
+				case 3: DebugLevel = Debug3
+				case 4: DebugLevel = Debug4
+				case 5: DebugLevel = Debug5
+				case 6: DebugLevel = Debug6
+				case 7: DebugLevel = Debug7
+				default: ret = "error\n"
+			}
+			ret = "Done\n"
 		default:
 			ret = "unsupported\n"
 	}

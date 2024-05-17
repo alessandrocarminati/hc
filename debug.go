@@ -17,7 +17,7 @@ const (
 )
 
 //const DebugLevel uint32 = debugIO | (1<<debugAddFunctionName-1)
-const DebugLevel uint32 = DebugNone
+var DebugLevel uint32 = DebugNone
 
 func DPrintf(level uint32, format string, a ...interface{}) {
 	var s string

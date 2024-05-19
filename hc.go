@@ -32,6 +32,7 @@ func main() {
 	historyFile := flag.String("history", "", "File name for history")
 	collectorPort := flag.String("collector-port", "12345", "Port number for collector")
 	searcherPort := flag.String("searcher-port", "12344", "Port number for searcher")
+	http_presenter := flag.String("http-port", "12343", "Port number for http interface")
 	flag.Parse()
 	if *tagsFile == "" || *historyFile == "" {
 		fmt.Println("Usage: program -tags <tags file> -history <history file> -collector-port <collector port> -searcher-port <searcher port>")
@@ -50,6 +51,7 @@ func main() {
 	history.LoadLogFromFile()
 	go cwdata(history, ch)
 	go searcher(history, ":" + *searcherPort)
+	go http_present(&history.RawLog, http_presenter, verstr)
 	ln, err := net.Listen("tcp", ":" + *collectorPort)
 	if err != nil {
 		panic(err)

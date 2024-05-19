@@ -4,9 +4,47 @@
     <meta charset="UTF-8">
     <title>{{.Title}}</title>
     <style>
-        body { display: flex; }
-        #navigation { width: 20%; border-right: 1px solid #ccc; padding: 10px; }
-        #data { width: 80%; padding: 10px; }
+        body {
+            display: flex;
+            background-color: black;
+            color: green;
+            font-family: monospace;
+        }
+        #navigation {
+            width: 20%;
+            border-right: 1px solid #ccc;
+            padding: 10px;
+        }
+        #data {
+            width: 80%;
+            padding: 10px;
+            white-space: pre-wrap;
+            line-height: 1.2;
+        }
+        ul {
+            list-style-type: none;
+            padding-left: 20px;
+        }
+        li {
+            cursor: pointer;
+        }
+        li ul {
+            padding-left: 20px;
+        }
+        li::marker {
+            color: green;
+        }
+        a {
+            color: green;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+	pre {
+            margin: 0;
+            padding: 0;
+        }
     </style>
 </head>
 <body>

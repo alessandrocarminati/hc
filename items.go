@@ -32,6 +32,7 @@ type History struct {
 	ParsedItems	[]Item
 	seenCommands	map[string]int
 	RegexTagPrefix	string		`json:"RegexPrefix"`
+	RawLog		[]string
 }
 
 func extractSwitches(commandLine string) []string {
@@ -61,6 +62,7 @@ func (h *History) ProcessCommand(command string) error{
 		return errors.New(fmt.Sprintf("Invalid command format: %v", command))
 	}
 
+	h.RawLog = append(h.RawLog, command)
 	dateStr := matches[1]
 	sessionIDHex := matches[2]
 	hoststr := strings.Split(matches[3], " ")

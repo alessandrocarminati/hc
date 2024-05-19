@@ -97,12 +97,12 @@ func (h *History) ProcessCommand(command string) error{
 			newItem.Tags[switch_] = true
 		}
 		cmds := h.GetCommand(commandStr)
-                for _, cmd := range cmds {
+		for _, cmd := range cmds {
 			if cmd!="" {
 				newItem.Tags[cmd] = true
 			}
 
-                }
+		}
 		h.ParsedItems = append(h.ParsedItems, newItem)
 
 	}
@@ -185,8 +185,8 @@ func (h *History) LoadLogFromFile() error {
 
 func NewHistory(TagFile, backendfile string) (*History, error) {
 	h := History{
-                ParsedItems: make([]Item, 0),
-                seenCommands: map[string]int{},
+		ParsedItems: make([]Item, 0),
+		seenCommands: map[string]int{},
 		FileBackend: backendfile,
 	}
 

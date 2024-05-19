@@ -25,7 +25,8 @@ type data struct {
 }
 
 func main() {
-	fmt.Printf("hc Ver. %s.%s (%s) %s\n", Version, Build, Hash, Dirty)
+	verstr := fmt.Sprintf("hc Ver. %s.%s (%s) %s\n", Version, Build, Hash, Dirty)
+	fmt.Println(verstr)
 
 	tagsFile := flag.String("tags", "", "File name for tags")
 	historyFile := flag.String("history", "", "File name for history")

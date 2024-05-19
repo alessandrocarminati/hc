@@ -11,6 +11,13 @@ import (
 )
 
 var bufsiz int = 4 * 1048576
+
+var Build string
+var Version string
+var Hash string
+var Dirty string
+
+
 type data struct {
 	Str []byte
 	Size int
@@ -18,6 +25,7 @@ type data struct {
 }
 
 func main() {
+	fmt.Printf("hc Ver. %s.%s (%s) %s\n", Version, Build, Hash, Dirty)
 
 	tagsFile := flag.String("tags", "", "File name for tags")
 	historyFile := flag.String("history", "", "File name for history")

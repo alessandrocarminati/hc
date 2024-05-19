@@ -177,6 +177,12 @@ func do_search(h *History, type_, text string) string {
 			for i:= len(h.ParsedItems)-n; i<len(h.ParsedItems); i++ {
 				ret = ret + fmt.Sprintf("%s %08x - %s, ==> %s\n", h.ParsedItems[i].Date.Format("2006-01-02 15:04:05"), h.ParsedItems[i].SessionID, h.ParsedItems[i].HostName, h.ParsedItems[i].Command)
 			}
+		case "raw":
+		for _, line := range h.RawLog {
+			if strings.Contains(line, text) {
+				ret = ret + fmt.Sprintf("%s\n", line)
+			}
+		}
 		case "debug":
 			n, err := strconv.Atoi(text)
 			if err != nil {

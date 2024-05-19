@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-var tpl = template.Must(template.ParseFiles("template.html"))
+//var tpl = template.Must(template.ParseFiles("template.html"))
 
 type PageData struct {
 	Title   string
@@ -21,6 +21,11 @@ func http_present(logs *[]string, port *string, ver string) {
 	logTree, err := buildLogTree(*logs)
 	if err != nil {
 		log.Fatalf("failed to build log tree: %v", err)
+	}
+
+	tpl, err := template.New("webpage").Parse(tmplStr)
+	if err != nil {
+		log.Fatalf("failed to parse template: %v", err)
 	}
 
 	router := mux.NewRouter()

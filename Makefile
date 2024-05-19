@@ -6,7 +6,7 @@ SOURCES := $(wildcard *.go)
 
 all: hc-$(MAJOR).$(MINOR)
 
-hc-$(MAJOR).$(MINOR): debug.go  hc.go  items.go
+hc-$(MAJOR).$(MINOR): $(SOURCES)
 	go build -ldflags "-w -X 'main.Version=$(MAJOR)' -X 'main.Build=$(MINOR)' -X 'main.Hash=$(CHASH)' -X 'main.Dirty=$(DIRTY)'" -o  hc-$(MAJOR).$(MINOR)
 
 clean:

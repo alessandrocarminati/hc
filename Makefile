@@ -13,7 +13,7 @@ generated.go: template.html
 	@echo "\`" >>generated.go
 
 hc-$(MAJOR).$(MINOR): $(SOURCES) generated.go
-	go build -ldflags "-w -X 'main.Version=$(MAJOR)' -X 'main.Build=$(MINOR)' -X 'main.Hash=$(CHASH)' -X 'main.Dirty=$(DIRTY)'" -o  hc-$(MAJOR).$(MINOR)
+	go build -ldflags "-w -X 'main.Version=$(MAJOR)' -X 'main.Build=$(MINOR)' -X 'main.Hash=$(CHASH)' -X 'main.Dirty=$(DIRTY)'" -o  hc-$(MAJOR).$(MINOR).$(DIRTY)
 
 clean:
 	rm -rf  hc-* generated.go

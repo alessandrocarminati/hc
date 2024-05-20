@@ -9,8 +9,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-//var tpl = template.Must(template.ParseFiles("template.html"))
-
 type PageData struct {
 	Title   string
 	LogTree *LogTree

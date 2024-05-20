@@ -14,9 +14,10 @@ type PageData struct {
 	LogTree *LogTree
 }
 
-func http_present(logs *[]string, port *string, ver string) {
+func http_present(h *History, port *string, ver string) {
 
-	logTree, err := buildLogTree(*logs)
+	logTree, err := buildLogTree(h.RawLog)
+	h.LogTree = logTree
 	if err != nil {
 		log.Fatalf("failed to build log tree: %v", err)
 	}

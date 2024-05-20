@@ -33,6 +33,7 @@ type History struct {
 	seenCommands	map[string]int
 	RegexTagPrefix	string		`json:"RegexPrefix"`
 	RawLog		[]string
+	LogTree		*LogTree
 }
 
 func extractSwitches(commandLine string) []string {
@@ -52,7 +53,7 @@ func (t Tag)RegexStr(prefix string) string {
 	return t.Regex
 }
 
-func (h *History) ProcessCommand(command string) error{
+func (h *History) ProcessCommand(command string, initialLoad bool) error{
 
 	pattern := `^([0-9]{8}\.[0-9]{6}) - ([0-9a-f]{8}) - (.*)\> (.*)$`
 	re := regexp.MustCompile(pattern)
@@ -63,6 +64,12 @@ func (h *History) ProcessCommand(command string) error{
 	}
 
 	h.RawLog = append(h.RawLog, command)
+	if !initialLoad {
+		err := ProcessEntryTree(command, h.LogTree)
+		if err!=nil {
+			fmt.Printf("error updating http tree\n")
+		}
+	}
 	dateStr := matches[1]
 	sessionIDHex := matches[2]
 	hoststr := strings.Split(matches[3], " ")
@@ -173,7 +180,7 @@ func (h *History) LoadLogFromFile() error {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		h.ProcessCommand(scanner.Text())
+		h.ProcessCommand(scanner.Text(), true)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -188,6 +195,7 @@ func NewHistory(TagFile, backendfile string) (*History, error) {
 		ParsedItems: make([]Item, 0),
 		seenCommands: map[string]int{},
 		FileBackend: backendfile,
+		LogTree: &LogTree{Year: make(map[int]*YearNode)},
 	}
 
 	file, err := os.Open(TagFile)

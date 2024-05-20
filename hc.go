@@ -51,7 +51,7 @@ func main() {
 	history.LoadLogFromFile()
 	go cwdata(history, ch)
 	go searcher(history, ":" + *searcherPort)
-	go http_present(&history.RawLog, http_presenter, verstr)
+	go http_present(history, http_presenter, verstr)
 	ln, err := net.Listen("tcp", ":" + *collectorPort)
 	if err != nil {
 		panic(err)
@@ -102,7 +102,7 @@ func cwdata(h *History, ch chan data) {
 		DPrintf(Debug7, "Look Checkpoint2\n")
 		cmd := string(b.Str[0:b.Size])
 		h.SaveLog(strings.TrimSuffix(cmd, "\n"))
-		h.ProcessCommand(strings.TrimSuffix(cmd, "\n"))
+		h.ProcessCommand(strings.TrimSuffix(cmd, "\n"), false)
 		DPrintf(Debug7, "Look Checkpoint3\n")
 		keep=b.Keep;
 	}

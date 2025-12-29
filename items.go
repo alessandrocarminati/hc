@@ -10,6 +10,7 @@ import (
 	"os"
 	"errors"
 	"bufio"
+	"log"
 )
 
 type Tag struct {
@@ -155,16 +156,16 @@ func (h *History) extractCommand(cmd string) string {
 }
 
 func (h *History) SaveLog(command string) error {
-	DPrintf(Debug7, "SaveLog - open file (%s)\n", h.FileBackend)
+	debugPrint(log.Printf, levelCrazy, "SaveLog - open file (%s)\n", h.FileBackend)
 	file, err := os.OpenFile(h.FileBackend, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	DPrintf(Debug7, "SaveLog - write data '%s'\n", command)
+	debugPrint(log.Printf, levelCrazy, "SaveLog - write data '%s'\n", command)
 	_, err = file.WriteString(command + "\n")
 	if err != nil {
-		DPrintf(Debug1, "SaveLog - error writing command\n")
+		debugPrint(log.Printf, levelError, "SaveLog - error writing command\n")
 		return err
 	}
 

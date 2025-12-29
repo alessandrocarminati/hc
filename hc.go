@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"os"
+	"log"
 )
 
 var bufsiz int = 4 * 1048576
@@ -26,18 +27,19 @@ type data struct {
 
 type Options struct {
 	Cfg       Config
-	LogLevel  string
+	LogLevel  DebugLevels
 	Verstr    string
 }
 
 func main() {
 	verstr := fmt.Sprintf("hc Ver. %s.%s (%s) %s\n", Version, Build, Hash, Dirty)
-	DebugLevel = Debug7
 
 	cl, err := ParseCommandLine(os.Args[1:])
 	if err != nil {
 		os.Exit(2)
 	}
+	DebugLevel = cl.LogLevel.Value
+
 	if cl.PrintVersion {
 		fmt.Println(verstr)
 		return
@@ -111,7 +113,7 @@ func ValidateTags(Parser ParserConfig) bool {
 }
 
 func ValidateServer(s ListenerConfig) bool {
-	fmt.Printf("ValidateServer: addr=%s enabled=%t\n", s.Addr, s.Enabled)
+	debugPrint(log.Printf, levelCrazy, "ValidateServer: addr=%s enabled=%t\n", s.Addr, s.Enabled)
 
 	if s.Enabled && s.Addr == "" {
 		return false
@@ -138,7 +140,7 @@ func Run(opts *Options) {
 		panic(err)
 	}
 	for {
-		DPrintf(Debug5, "Connection\n")
+		debugPrint(log.Printf, levelDebug, "Connection\n")
 		conn, err = ln.Accept()
 		if err != nil {
 			panic( err)
@@ -146,14 +148,14 @@ func Run(opts *Options) {
 		go receivedata(conn, ch)
 		}
 
-	DPrintf(Debug5, "exit\n")
+	debugPrint(log.Printf, levelDebug, "exit\n")
 	close(ch)
 }
 
 func receivedata(rd net.Conn, ch chan data) {
 
-	defer 	DPrintf(Debug6, "dead\n")
-	DPrintf(Debug6, "alive\n")
+	defer 	debugPrint(log.Printf, levelCrazy, "dead\n")
+	debugPrint(log.Printf, levelCrazy, "alive\n")
 	b := make([]byte, bufsiz)
 
 	for {
@@ -164,27 +166,27 @@ func receivedata(rd net.Conn, ch chan data) {
 		if m == 0 || err == io.EOF {
 			break
 			}
-		DPrintf(Debug7, "sent 2 channel\n")
+		debugPrint(log.Printf, levelCrazy, "sent 2 channel\n")
 		ch <- data{Str:b, Size:m, Keep: true}
 	}
-	DPrintf(Debug7, "Connection closed\n")
+	debugPrint(log.Printf, levelCrazy, "Connection closed\n")
 	rd.Close()
 }
 
 func cwdata(h *History, ch chan data) {
 
 	keep:=true
-	defer 	DPrintf(Debug6, "dead\n")
-	DPrintf(Debug6, "alive\n")
+	defer 	debugPrint(log.Printf, levelCrazy, "dead\n")
+	debugPrint(log.Printf, levelCrazy, "alive\n")
 
 	for keep==true {
-		DPrintf(Debug7, "Look Checkpoint1\n")
+		debugPrint(log.Printf, levelCrazy, "Look Checkpoint1\n")
 		b := <- ch
-		DPrintf(Debug7, "Look Checkpoint2\n")
+		debugPrint(log.Printf, levelCrazy, "Look Checkpoint2\n")
 		cmd := string(b.Str[0:b.Size])
 		h.SaveLog(strings.TrimSuffix(cmd, "\n"))
 		h.ProcessCommand(strings.TrimSuffix(cmd, "\n"), false)
-		DPrintf(Debug7, "Look Checkpoint3\n")
+		debugPrint(log.Printf, levelCrazy, "Look Checkpoint3\n")
 		keep=b.Keep;
 	}
 
@@ -198,7 +200,7 @@ func searcher(h *History, port string) {
 		return
 	}
 	defer listener.Close()
-	 DPrintf(Debug6, "Server listening on %s\n", port)
+	 debugPrint(log.Printf, levelCrazy, "Server listening on %s\n", port)
 
 	for {
 		conn, err := listener.Accept()
@@ -273,14 +275,13 @@ func do_search(h *History, type_, text string) string {
 				break
 			}
 			switch n {
-				case 0: DebugLevel = DebugNone
-				case 1: DebugLevel = Debug1
-				case 2: DebugLevel = Debug2
-				case 3: DebugLevel = Debug3
-				case 4: DebugLevel = Debug4
-				case 5: DebugLevel = Debug5
-				case 6: DebugLevel = Debug6
-				case 7: DebugLevel = Debug7
+				case 0: DebugLevel = levelPanic.Value
+				case 1: DebugLevel = levelError.Value
+				case 2: DebugLevel = levelWarning.Value
+				case 3: DebugLevel = levelNotice.Value
+				case 4: DebugLevel = levelInfo.Value
+				case 5: DebugLevel = levelDebug.Value
+				case 6: DebugLevel = levelCrazy.Value
 				default: ret = "error\n"
 			}
 			ret = "Done\n"

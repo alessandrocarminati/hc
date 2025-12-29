@@ -1,0 +1,49 @@
+{
+    "server": {
+        "listner_clear": {
+            "enabled": true,
+            "addr": "0.0.0.0:1234"
+        },
+        "listner_tls": {
+            "enabled": false,
+            "addr": "0.0.0.0:1235"
+        },
+        "listner_search": {
+            "enabled": true,
+            "addr": "0.0.0.0:1236"
+        },
+        "http": {
+            "enabled": true,
+            "addr": "0.0.0.0:8080"
+        },
+        "https": {
+            "enabled": false,
+            "addr": "0.0.0.0:8443"
+        }
+    },
+    "parser": {
+        "tags_file": "tags.json",
+        "regex_prefix": ""
+    },
+    "db": {
+        "postgres_dsn": ""
+    },
+    "history_file": "history.txt",
+    "tenancy": {
+        "default_tenant_id": "",
+        "trusted_sources": [
+            {
+                "CIDR": "10.1.0.0/16",
+                "tenant_id": "main",
+                "note": "default"
+            }
+        ]
+    },
+    "tls": {
+        "cert_file": "cert.crt",
+        "key_file": "cert.key"
+    },
+    "limits": {
+        "max_line_bytes": 655536
+    }
+}

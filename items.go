@@ -155,7 +155,7 @@ func (h *History) extractCommand(cmd string) string {
 }
 
 func (h *History) SaveLog(command string) error {
-	DPrintf(Debug7, "SaveLog - open file\n")
+	DPrintf(Debug7, "SaveLog - open file (%s)\n", h.FileBackend)
 	file, err := os.OpenFile(h.FileBackend, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err

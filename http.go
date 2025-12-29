@@ -14,7 +14,7 @@ type PageData struct {
 	LogTree *LogTree
 }
 
-func http_present(h *History, port *string, ver string) {
+func http_present(h *History, lstAddr string, ver string) {
 
 	logTree, err := buildLogTree(h.RawLog)
 	h.LogTree = logTree
@@ -41,6 +41,6 @@ func http_present(h *History, port *string, ver string) {
 	}).Methods("GET")
 
 	http.Handle("/", router)
-	log.Println("Listening on :" + *port)
-	http.ListenAndServe(":" + *port, nil)
+	log.Println("Listening on: " + lstAddr)
+	http.ListenAndServe(lstAddr, nil)
 }

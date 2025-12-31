@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"os"
 )
 
 type CommandLine struct {
@@ -16,7 +15,6 @@ func ParseCommandLine(args []string) (CommandLine, error) {
 	var lL string
 
 	fs := flag.NewFlagSet("hc", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
 
 	fs.StringVar(&cl.ConfigPath, "config", "", "Path to JSON config file (optional). If empty, built-in defaults apply.")
 

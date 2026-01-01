@@ -28,6 +28,7 @@ func doRunServe(version string, args []string) {
 		os.Exit(1)
 	}
 
+	debugPrint(log.Printf, levelWarning, "The current behaviour of archiving the ingested lines into the text file is deprecated, and the feature will be removed.\n")
 	debugPrint(log.Printf, levelDebug, "Start serving\n")
 
 	serve(opts)

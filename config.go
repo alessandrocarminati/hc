@@ -14,6 +14,7 @@ type Config struct {
 	Tenancy         TenancyConfig `json:"tenancy"`
 	TLS             TLSConfig     `json:"tls"`
 	Limits          LimitsConfig  `json:"limits"`
+	Export          ExportConfig  `json:"Export"`
 }
 
 type ServerConfig struct {
@@ -57,6 +58,24 @@ type TLSConfig struct {
 
 type LimitsConfig struct {
 	MaxLineBytes    int `json:"max_line_bytes"`
+}
+
+type ExportEndpointConfig struct {
+	Enabled bool   `json:"Enabled"`
+	TenantID string `json:"TenantID"`
+}
+
+type ExportConfig struct {
+	Enabled bool `json:"Enabled"`
+
+	Unsecure ExportEndpointConfig `json:"Unsecure"`
+	CIDR     ExportEndpointConfig `json:"CIDR"`
+	HMAC     ExportEndpointConfig `json:"HMAC"`
+
+	SSL ExportEndpointConfig `json:"SSL"`
+
+	MaxRows    int `json:"MaxRows"`
+	MaxSeconds int `json:"MaxSeconds"`
 }
 
 func DefaultConfig() Config {

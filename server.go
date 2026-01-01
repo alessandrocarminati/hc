@@ -107,7 +107,7 @@ func serve(opts *Options) {
 	history.LoadLogFromFile()
 	go cwdata(history, ch)
 	go searcher(history, opts.Cfg.Server.ListnerSearch.Addr)
-	go http_present(history, opts.Cfg.Server.HTTP.Addr, opts.Verstr)
+	go http_present(history, opts)
 	ln, err := net.Listen("tcp", opts.Cfg.Server.ListnerClear.Addr)
 	if err != nil {
 		panic(err)

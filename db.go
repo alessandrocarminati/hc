@@ -3,14 +3,13 @@ package main
 import (
 	"bufio"
 	"context"
-//	"crypto/sha256"
 	"database/sql"
-//	"encoding/hex"
 	"fmt"
 	"regexp"
-//	"strings"
 	"unicode/utf8"
 	"os"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -31,6 +30,12 @@ type Event struct {
 	RawLine   string
 	Transport string
 	SrcIP     *string
+}
+
+type StreamExportOptions struct {
+	TenantID  string
+	Limit     int
+	BatchSize int
 }
 
 func OpenDB(ctx context.Context, dsn string) (*DB, error) {
@@ -346,3 +351,151 @@ func parseTS(s string) (time.Time, bool) {
 
 func strPtr(s string) *string { return &s }
 
+func (d *DB) StreamExport(ctx context.Context, w io.Writer, flusher http.Flusher, opt StreamExportOptions) error {
+	if d == nil || d.SQL == nil {
+		return fmt.Errorf("db not initialized")
+	}
+	tenantID := strings.TrimSpace(opt.TenantID)
+	if tenantID == "" {
+		return fmt.Errorf("tenant_id is required")
+	}
+
+	limit := opt.Limit
+	if limit <= 0 {
+		limit = 200000
+	}
+	batch := opt.BatchSize
+	if batch <= 0 {
+		batch = 5000
+	}
+	if batch > limit {
+		batch = limit
+	}
+
+	var (
+		lastID  *int64
+		written int
+	)
+
+	for written < limit {
+		rows, err := d.SQL.QueryContext(ctx, `
+			select id, ts_client, ts_ingested, session_id, host_fqdn, cwd, cmd, raw_line
+			from cmd_events
+			where tenant_id = $1
+			  and ($2::bigint is null or id < $2)
+			order by id desc
+			limit $3
+		`, tenantID, lastID, batch)
+		if err != nil {
+			return fmt.Errorf("export query: %w", err)
+		}
+
+		n := 0
+		for rows.Next() {
+			n++
+
+			var (
+				id         int64
+				tsClient   sql.NullTime
+				tsIngested time.Time
+				sessionID  sql.NullString
+				host       sql.NullString
+				cwd        sql.NullString
+				cmd        sql.NullString
+				raw        string
+			)
+
+			if err := rows.Scan(&id, &tsClient, &tsIngested, &sessionID, &host, &cwd, &cmd, &raw); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("export scan: %w", err)
+			}
+
+			line := formatExportLine(tsClient, tsIngested, sessionID, host, cwd, cmd, raw)
+			if _, err := io.WriteString(w, line+"\n"); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf("export write: %w", err)
+			}
+
+			lastID = &id
+			written++
+			if written >= limit {
+				break
+			}
+		}
+
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("export rows: %w", err)
+		}
+		_ = rows.Close()
+
+		if flusher != nil {
+			flusher.Flush()
+		}
+
+		if n == 0 {
+			return nil
+		}
+
+		remaining := limit - written
+		if remaining < batch {
+			batch = remaining
+		}
+	}
+
+	return nil
+}
+
+func formatExportLine(tsClient sql.NullTime, tsIngested time.Time, sessionID sql.NullString, host sql.NullString, cwd sql.NullString, cmd sql.NullString, raw string) string {
+	t := tsIngested
+	if tsClient.Valid {
+		t = tsClient.Time
+	}
+	tsStr := t.Format("20060102.150405")
+
+	sess := "-"
+	if sessionID.Valid {
+		v := strings.TrimSpace(sessionID.String)
+		if v != "" && v != "unknown" {
+			sess = v
+		}
+	}
+
+	h := "-"
+	if host.Valid {
+		v := strings.TrimSpace(host.String)
+		if v != "" && v != "unknown" {
+			h = v
+		}
+	}
+
+	payload := ""
+	if cmd.Valid {
+		v := strings.TrimSpace(cmd.String)
+		if v != "" {
+			payload = v
+		}
+	}
+	if payload == "" {
+		payload = strings.TrimSpace(raw)
+		if payload == "" {
+			payload = "-"
+		}
+	}
+	payload = sanitizeForOneLine(payload)
+
+	if cwd.Valid {
+		c := strings.TrimSpace(cwd.String)
+		if c != "" {
+			return fmt.Sprintf("%s - %s - %s [cwd=%s] > %s", tsStr, sess, h, sanitizeForOneLine(c), payload)
+		}
+	}
+
+	return fmt.Sprintf("%s - %s - %s > %s", tsStr, sess, h, payload)
+}
+
+func sanitizeForOneLine(s string) string {
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	return strings.TrimRight(s, " \t")
+}

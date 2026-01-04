@@ -2,6 +2,7 @@ package main
 
 import (
 	"time"
+	"log"
 )
 
 type LogTree struct {
@@ -21,6 +22,7 @@ type DayNode struct {
 }
 
 func buildLogTree(logs []string) (*LogTree, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v\n", logs)
 	tree := &LogTree{Year: make(map[int]*YearNode)}
 
 	for _, logStr := range logs {
@@ -34,6 +36,7 @@ func buildLogTree(logs []string) (*LogTree, error) {
 }
 
 func ProcessEntryTree(logStr string, tree *LogTree) (error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", logStr, tree)
 	entry, err := parseLogEntry(logStr)
 	if err != nil {
 		return err

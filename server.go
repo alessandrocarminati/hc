@@ -21,7 +21,6 @@ type data struct {
 }
 
 func doRunServe(version string, args []string) {
-
 	opts, err := getRuntimeConf(version, args)
 	if err != nil {
 		fmt.Printf("%v", err)
@@ -80,6 +79,7 @@ func ResolveOptions(cfg Config, cl CommandLine, verstr string) (*Options, error)
 }
 
 func ValidateTags(Parser ParserConfig) bool {
+	debugPrint(log.Printf, levelCrazy, "Args=%v\n", Parser)
 	if Parser.TagsFile != "" {
 		return true
 	}
@@ -87,7 +87,7 @@ func ValidateTags(Parser ParserConfig) bool {
 }
 
 func ValidateServer(s ListenerConfig) bool {
-	debugPrint(log.Printf, levelCrazy, "ValidateServer: addr=%s enabled=%t\n", s.Addr, s.Enabled)
+	debugPrint(log.Printf, levelCrazy, "Args=%v\n", s)
 
 	if s.Enabled && s.Addr == "" {
 		return false
@@ -97,6 +97,7 @@ func ValidateServer(s ListenerConfig) bool {
 
 func serve(opts *Options) {
 
+	debugPrint(log.Printf, levelCrazy, "Args=%v\n", opts)
 	ch := make(chan data, 100)
 	var conn net.Conn
 	var err error
@@ -128,6 +129,7 @@ func serve(opts *Options) {
 
 func receivedata(rd net.Conn, ch chan data) {
 
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", rd, ch)
 	defer 	debugPrint(log.Printf, levelCrazy, "dead\n")
 	debugPrint(log.Printf, levelCrazy, "alive\n")
 	b := make([]byte, bufsiz)
@@ -149,6 +151,7 @@ func receivedata(rd net.Conn, ch chan data) {
 
 func cwdata(h *History, ch chan data) {
 
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", h, ch)
 	keep:=true
 	defer 	debugPrint(log.Printf, levelCrazy, "dead\n")
 	debugPrint(log.Printf, levelCrazy, "alive\n")
@@ -168,6 +171,7 @@ func cwdata(h *History, ch chan data) {
 
 func searcher(h *History, port string) {
 
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", h, port)
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
 		fmt.Println("Error listening:", err.Error())
@@ -188,6 +192,7 @@ func searcher(h *History, port string) {
 }
 
 func handleConnection(conn net.Conn, h *History) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", conn, h)
 	defer conn.Close()
 
 	buf := make([]byte, 1024)
@@ -209,10 +214,12 @@ func handleConnection(conn net.Conn, h *History) {
 }
 
 func parseTokens(s string) []string {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", s)
 	return strings.Split(s, ":")
 }
 
 func do_search(h *History, type_, text string) string {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s, %s\n", h, type_, text)
 	ret := ""
 	switch type_ {
 		case "tag":

@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
+	"log"
 	_ "github.com/lib/pq"
 )
 
@@ -39,6 +39,8 @@ type StreamExportOptions struct {
 }
 
 func OpenDB(ctx context.Context, dsn string) (*DB, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", ctx, dsn)
+
 	if strings.TrimSpace(dsn) == "" {
 		return nil, fmt.Errorf("invalid postgres dsn")
 	}
@@ -61,6 +63,7 @@ func OpenDB(ctx context.Context, dsn string) (*DB, error) {
 }
 
 func (d *DB) Close() error {
+	debugPrint(log.Printf, levelCrazy, "Args=none\n")
 	if d == nil || d.SQL == nil {
 		return nil
 	}
@@ -68,6 +71,7 @@ func (d *DB) Close() error {
 }
 
 func sanitizeUTF8(s string) string {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", s)
 	if utf8.ValidString(s) {
 		return s
 	}
@@ -75,6 +79,7 @@ func sanitizeUTF8(s string) string {
 }
 
 func (d *DB) VerifySchema(ctx context.Context) error {
+	debugPrint(log.Printf, levelCrazy, "Args=%v\n", ctx)
 	stmts := []string{
 		`create extension if not exists pg_trgm;`,
 
@@ -121,6 +126,7 @@ func (d *DB) VerifySchema(ctx context.Context) error {
 }
 
 func shortSQL(s string) string {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", s)
 	s = strings.Join(strings.Fields(s), " ")
 	if len(s) > 80 {
 		return s[:80] + "..."
@@ -129,6 +135,7 @@ func shortSQL(s string) string {
 }
 
 func (d *DB) EnsureTenant(ctx context.Context, tenantID, name string) error {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s, %s\n", ctx, tenantID, name)
 	_, err := d.SQL.ExecContext(ctx,
 		`insert into tenants(id, name) values ($1, $2)
 		 on conflict (id) do nothing;`,
@@ -140,6 +147,7 @@ func (d *DB) EnsureTenant(ctx context.Context, tenantID, name string) error {
 }
 
 func (d *DB) GetTenantName(ctx context.Context, tenantID string) (string, bool, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", ctx, tenantID)
 	var name string
 	err := d.SQL.QueryRowContext(
 		ctx,
@@ -157,6 +165,7 @@ func (d *DB) GetTenantName(ctx context.Context, tenantID string) (string, bool, 
 }
 
 func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inserted int, skipped int, err error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s, %s\n", ctx, tenantID, path)
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, 0, fmt.Errorf("open history file: %w", err)
@@ -232,6 +241,7 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 }
 
 func ParseLegacyLineBestEffort(tenantID, line string) Event {
+	debugPrint(log.Printf, levelCrazy, "Args=%s, %s\n", tenantID, line)
 	ev := Event{
 		TenantID:   tenantID,
 		RawLine:   line,
@@ -342,6 +352,7 @@ func ParseLegacyLineBestEffort(tenantID, line string) Event {
 }
 
 func parseTS(s string) (time.Time, bool) {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", s)
 	t, err := time.ParseInLocation("20060102.150405", s, time.Local)
 	if err != nil {
 		return time.Time{}, false
@@ -352,6 +363,7 @@ func parseTS(s string) (time.Time, bool) {
 func strPtr(s string) *string { return &s }
 
 func (d *DB) StreamExport(ctx context.Context, w io.Writer, flusher http.Flusher, opt StreamExportOptions) error {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v, %v, %v\n", ctx, w, flusher, opt)
 	if d == nil || d.SQL == nil {
 		return fmt.Errorf("db not initialized")
 	}
@@ -447,6 +459,7 @@ func (d *DB) StreamExport(ctx context.Context, w io.Writer, flusher http.Flusher
 }
 
 func formatExportLine(tsClient sql.NullTime, tsIngested time.Time, sessionID sql.NullString, host sql.NullString, cwd sql.NullString, cmd sql.NullString, raw string) string {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v, %v, %v, %v, %s, %s\n", tsClient, tsIngested, sessionID, host, cwd, cmd, raw, )
 	t := tsIngested
 	if tsClient.Valid {
 		t = tsClient.Time
@@ -495,6 +508,7 @@ func formatExportLine(tsClient sql.NullTime, tsIngested time.Time, sessionID sql
 }
 
 func sanitizeForOneLine(s string) string {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", s)
 	s = strings.ReplaceAll(s, "\r", `\r`)
 	s = strings.ReplaceAll(s, "\n", `\n`)
 	return strings.TrimRight(s, " \t")

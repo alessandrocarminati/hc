@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"log"
 	"time"
 )
 
@@ -17,6 +18,7 @@ type LogEntry struct {
 var logRegex = regexp.MustCompile(`^([0-9]{8}\.[0-9]{6}) - ([0-9a-f]{8}) - (.*)\> (.*)$`)
 
 func parseLogEntry(logStr string) (LogEntry, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", logStr)
 	matches := logRegex.FindStringSubmatch(logStr)
 	if len(matches) != 5 {
 		return LogEntry{}, fmt.Errorf("invalid log format")

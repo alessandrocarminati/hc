@@ -38,6 +38,7 @@ type History struct {
 }
 
 func extractSwitches(commandLine string) []string {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", commandLine)
 	re := regexp.MustCompile(` (-[^ ="]+)[=" ]`)
 	matches := re.FindAllStringSubmatch(commandLine, -1)
 
@@ -48,6 +49,7 @@ func extractSwitches(commandLine string) []string {
 	return switches
 }
 func (t Tag)RegexStr(prefix string) string {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", prefix)
 	if t.WPrefix {
 		return prefix + t.Regex
 	}
@@ -56,6 +58,7 @@ func (t Tag)RegexStr(prefix string) string {
 
 func (h *History) ProcessCommand(command string, initialLoad bool) error{
 
+	debugPrint(log.Printf, levelCrazy, "Args=%s, %t\n", command, initialLoad)
 	pattern := `^([0-9]{8}\.[0-9]{6}) - ([0-9a-f]{8}) - (.*)\> (.*)$`
 	re := regexp.MustCompile(pattern)
 
@@ -119,6 +122,7 @@ func (h *History) ProcessCommand(command string, initialLoad bool) error{
 
 
 func (h *History) GetCommand(cmd string) []string {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", cmd)
 	commands := make([]string, 0)
 
 	separators := []string{"||", "&&", ";"}
@@ -146,6 +150,7 @@ func (h *History) GetCommand(cmd string) []string {
 }
 
 func (h *History) extractCommand(cmd string) string {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", cmd)
 	pattern := h.RegexTagPrefix + `([^ ]+) *`
 	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(cmd)
@@ -156,6 +161,7 @@ func (h *History) extractCommand(cmd string) string {
 }
 
 func (h *History) SaveLog(command string) error {
+	debugPrint(log.Printf, levelCrazy, "Args=%s\n", command)
 	debugPrint(log.Printf, levelCrazy, "SaveLog - open file (%s)\n", h.FileBackend)
 	file, err := os.OpenFile(h.FileBackend, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -173,6 +179,7 @@ func (h *History) SaveLog(command string) error {
 }
 
 func (h *History) LoadLogFromFile() error {
+	debugPrint(log.Printf, levelCrazy, "Args=none\n")
 	file, err := os.Open(h.FileBackend)
 	if err != nil {
 		return err
@@ -192,6 +199,7 @@ func (h *History) LoadLogFromFile() error {
 }
 
 func NewHistory(TagFile, backendfile string) (*History, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%s, %s\n", TagFile, backendfile)
 	h := History{
 		ParsedItems: make([]Item, 0),
 		seenCommands: map[string]int{},

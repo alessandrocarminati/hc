@@ -11,6 +11,7 @@ type Options struct {
 }
 
 func getRuntimeConf(version string, args []string) (*Options, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%s, %v\n", version, args)
 	cl, err := ParseCommandLine(args)
 	if err != nil {
 		return nil, err

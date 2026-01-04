@@ -9,6 +9,7 @@ import (
 
 func doImport(version string, args []string) {
 
+	debugPrint(log.Printf, levelCrazy, "Args=%s, %v\n", version, args)
 	opts, err := getRuntimeConf(version, args)
 	if err != nil {
 		fmt.Printf("%v", err)

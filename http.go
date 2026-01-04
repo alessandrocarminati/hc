@@ -16,6 +16,7 @@ type PageData struct {
 }
 
 func http_present(h *History, opts *Options) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", h, opts)
 	logTree, err := buildLogTree(h.RawLog)
 	if err != nil {
 		log.Fatalf("failed to build log tree: %v", err)

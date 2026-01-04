@@ -6,7 +6,6 @@ import (
 	"net"
 	"time"
 	"fmt"
-	"strconv"
 	"strings"
 	"log"
 )
@@ -108,7 +107,6 @@ func serve(opts *Options) {
 	}
 	history.LoadLogFromFile()
 	go cwdata(history, ch)
-	go searcher(history, opts.Cfg.Server.ListnerSearch.Addr)
 	go http_present(history, opts)
 	ln, err := net.Listen("tcp", opts.Cfg.Server.ListnerClear.Addr)
 	if err != nil {
@@ -167,107 +165,4 @@ func cwdata(h *History, ch chan data) {
 		keep=b.Keep;
 	}
 
-}
-
-func searcher(h *History, port string) {
-
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", h, port)
-	listener, err := net.Listen("tcp", port)
-	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		return
-	}
-	defer listener.Close()
-	 debugPrint(log.Printf, levelCrazy, "Server listening on %s\n", port)
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection:", err.Error())
-			return
-		}
-
-		go handleConnection(conn, h)
-	}
-}
-
-func handleConnection(conn net.Conn, h *History) {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", conn, h)
-	defer conn.Close()
-
-	buf := make([]byte, 1024)
-
-	n, err := conn.Read(buf)
-	if err != nil {
-		fmt.Println("Error reading:", err.Error())
-		return
-	}
-
-	receivedString := string(buf[:n])
-	tokens := parseTokens(receivedString)
-	result := do_search(h, tokens[0], strings.TrimSuffix(tokens[1], "\n"))
-	_, err = conn.Write([]byte(result))
-	if err != nil {
-		fmt.Println("Error writing:", err.Error())
-		return
-	}
-}
-
-func parseTokens(s string) []string {
-	debugPrint(log.Printf, levelCrazy, "Args=%s\n", s)
-	return strings.Split(s, ":")
-}
-
-func do_search(h *History, type_, text string) string {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %s, %s\n", h, type_, text)
-	ret := ""
-	switch type_ {
-		case "tag":
-		for _, item := range h.ParsedItems {
-			if v, ok := item.Tags[text];  v && ok {
-				ret = ret + fmt.Sprintf("%s %08x - %s, ==> %s\n", item.Date.Format("2006-01-02 15:04:05"), item.SessionID, item.HostName, item.Command)
-			}
-		}
-		case "text":
-		for _, item := range h.ParsedItems {
-			if strings.Contains(item.Command, text) {
-				ret = ret + fmt.Sprintf("%s %08x - %s, ==> %s\n", item.Date.Format("2006-01-02 15:04:05"), item.SessionID, item.HostName, item.Command)
-			}
-		}
-		case "last":
-			n, err := strconv.Atoi(text)
-			if err != nil {
-				ret = "error\n"
-				break
-			}
-			for i:= len(h.ParsedItems)-n; i<len(h.ParsedItems); i++ {
-				ret = ret + fmt.Sprintf("%s %08x - %s, ==> %s\n", h.ParsedItems[i].Date.Format("2006-01-02 15:04:05"), h.ParsedItems[i].SessionID, h.ParsedItems[i].HostName, h.ParsedItems[i].Command)
-			}
-		case "raw":
-		for _, line := range h.RawLog {
-			if strings.Contains(line, text) {
-				ret = ret + fmt.Sprintf("%s\n", line)
-			}
-		}
-		case "debug":
-			n, err := strconv.Atoi(text)
-			if err != nil {
-				ret = "error\n"
-				break
-			}
-			switch n {
-				case 0: DebugLevel = levelPanic.Value
-				case 1: DebugLevel = levelError.Value
-				case 2: DebugLevel = levelWarning.Value
-				case 3: DebugLevel = levelNotice.Value
-				case 4: DebugLevel = levelInfo.Value
-				case 5: DebugLevel = levelDebug.Value
-				case 6: DebugLevel = levelCrazy.Value
-				default: ret = "error\n"
-			}
-			ret = "Done\n"
-		default:
-			ret = "unsupported\n"
-	}
-	return ret
 }

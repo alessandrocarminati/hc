@@ -105,7 +105,6 @@ func serve(opts *Options) {
 	if err != nil {
 		panic(err)
 	}
-	history.LoadLogFromFile()
 	go cwdata(history, ch)
 	go http_present(history, opts)
 	ln, err := net.Listen("tcp", opts.Cfg.Server.ListnerClear.Addr)
@@ -160,7 +159,7 @@ func cwdata(h *History, ch chan data) {
 		debugPrint(log.Printf, levelCrazy, "Look Checkpoint2\n")
 		cmd := string(b.Str[0:b.Size])
 		h.SaveLog(strings.TrimSuffix(cmd, "\n"))
-		h.ProcessCommand(strings.TrimSuffix(cmd, "\n"), false)
+		h.ProcessCommand(strings.TrimSuffix(cmd, "\n"))
 		debugPrint(log.Printf, levelCrazy, "Look Checkpoint3\n")
 		keep=b.Keep;
 	}

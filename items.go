@@ -9,7 +9,6 @@ import (
 	"time"
 	"os"
 	"errors"
-	"bufio"
 	"log"
 )
 
@@ -56,9 +55,9 @@ func (t Tag)RegexStr(prefix string) string {
 	return t.Regex
 }
 
-func (h *History) ProcessCommand(command string, initialLoad bool) error{
+func (h *History) ProcessCommand(command string) error{
 
-	debugPrint(log.Printf, levelCrazy, "Args=%s, %t\n", command, initialLoad)
+	debugPrint(log.Printf, levelCrazy, "Args=%s, %t\n", command)
 	pattern := `^([0-9]{8}\.[0-9]{6}) - ([0-9a-f]{8}) - (.*)\> (.*)$`
 	re := regexp.MustCompile(pattern)
 
@@ -68,12 +67,6 @@ func (h *History) ProcessCommand(command string, initialLoad bool) error{
 	}
 
 	h.RawLog = append(h.RawLog, command)
-	if !initialLoad {
-		err := ProcessEntryTree(command, h.LogTree)
-		if err!=nil {
-			fmt.Printf("error updating http tree\n")
-		}
-	}
 	dateStr := matches[1]
 	sessionIDHex := matches[2]
 	hoststr := strings.Split(matches[3], " ")
@@ -172,26 +165,6 @@ func (h *History) SaveLog(command string) error {
 	_, err = file.WriteString(command + "\n")
 	if err != nil {
 		debugPrint(log.Printf, levelError, "SaveLog - error writing command\n")
-		return err
-	}
-
-	return nil
-}
-
-func (h *History) LoadLogFromFile() error {
-	debugPrint(log.Printf, levelCrazy, "Args=none\n")
-	file, err := os.Open(h.FileBackend)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		h.ProcessCommand(scanner.Text(), true)
-	}
-
-	if err := scanner.Err(); err != nil {
 		return err
 	}
 

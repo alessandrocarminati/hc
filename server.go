@@ -106,7 +106,7 @@ func serve(opts *Options) {
 		panic(err)
 	}
 	go cwdata(history, ch)
-	go http_present(history, opts)
+//	go http_present(history, opts)
 	ln, err := net.Listen("tcp", opts.Cfg.Server.ListnerClear.Addr)
 	if err != nil {
 		panic(err)

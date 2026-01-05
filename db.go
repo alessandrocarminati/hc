@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
+//	"regexp"
 	"unicode/utf8"
 	"os"
 	"io"
@@ -214,7 +214,11 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 			continue
 		}
 
-		ev := ParseLegacyLineBestEffort(tenantID, line, transport)
+//		ev := ParseLegacyLineBestEffort(tenantID, line, transport, "unknown")
+		ev, _ := ParseIngestLine(tenantID, line)
+		tmp := "unknown"
+		ev.Transport = transport
+		ev.SrcIP = &tmp
 
 		res, e := stmt.ExecContext(ctx,
 			seq,
@@ -226,7 +230,7 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 			ev.Cmd,
 			transport,
 			ev.RawLine,
-			ev.TSClient != nil,
+			ev.ParseOK,
 		)
 		if e != nil {
 			err = fmt.Errorf("insert line failed: %w", e)
@@ -251,12 +255,14 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 	return inserted, skipped, nil
 }
 
-func ParseLegacyLineBestEffort(tenantID, line, transport string) Event {
+/*
+func ParseLegacyLineBestEffort(tenantID, line, transport, ipAddr  string) Event {
 	debugPrint(log.Printf, levelCrazy, "Args=%s, %s\n", tenantID, line)
 	ev := Event{
 		TenantID:   tenantID,
 		RawLine:   line,
 		Transport: transport,
+		SrcIP: &ipAddr,
 	}
 
 	s := strings.TrimRight(line, "\r\n")
@@ -267,16 +273,19 @@ func ParseLegacyLineBestEffort(tenantID, line, transport string) Event {
 		return ev
 	}
 
+	// timestamp + session + host + cwd + payload
+	reCompl       := regexp.MustCompile(`^`(?P<ts>\d{8}\.\d{6})\s*-\s*(?:(?P<sid>[0-9a-f]{8})\s*-\s*)?(?P<host>[A-Za-z0-9._-]+)(?:\s+\[cwd=(?P<cwd>[^\]]+)\])?\s+>\s+(?P<payload>.*)$`)
+
 	// timestamp + session + host + payload
-	reSess := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*([0-9a-fA-F]{8})\s*-\s*(.+?)\s{2,}(.*)$`)
-	reSessLoose := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*([0-9a-fA-F]{8})\s*-\s*(.+?)\s+(.*)$`)
+	reSess        := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*([0-9a-fA-F]{8})\s*-\s*(.+?)\s{2,}(.*)$`)
+	reSessLoose   := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*([0-9a-fA-F]{8})\s*-\s*(.+?)\s+(.*)$`)
 
 	// timestamp + host + payload (no session)
-	reNoSess := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*(.+?)\s{2,}(.*)$`)
+	reNoSess      := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*(.+?)\s{2,}(.*)$`)
 	reNoSessLoose := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*(.+?)\s+(.*)$`)
 
 	// timestamp only fallback
-	reTSOnly := regexp.MustCompile(`^(\d{8}\.\d{6})\s+(.*)$`)
+	reTSOnly      := regexp.MustCompile(`^(\d{8}\.\d{6})\s+(.*)$`)
 
 	var (
 		tsStr    string
@@ -361,6 +370,7 @@ func ParseLegacyLineBestEffort(tenantID, line, transport string) Event {
 
 	return ev
 }
+*/
 
 func parseTS(s string) (time.Time, bool) {
 	debugPrint(log.Printf, levelCrazy, "Args=%s\n", s)
@@ -542,7 +552,7 @@ func (db *DB) MaxSeq(ctx context.Context, tenantID string) (int64, error) {
 }
 
 func (db *DB) InsertEventWithSeq(ctx context.Context, ev Event, seq int64) error {
-	debugPrint(log.Printf, levelDebug, "Args: %v, %v, %d----> %s\n", ctx, ev, seq, ev.TenantID )
+	debugPrint(log.Printf, levelDebug, "Args: %v, %v, %d ----> %s\n", ctx, ev, seq, ev.TenantID )
 
 	TSClient := nullTime(ev.TSClient)
 	CWD := nullString(ev.CWD)

@@ -197,7 +197,7 @@ func SetupIngestionWithConfig(parent context.Context, cfg IngestConfig) (*Ingest
 				cancel()
 				return nil, fmt.Errorf("db connect failed (required): %w", err)
 			}
-			log.Printf("warning: db connect failed (ingestion will spool but DB insert disabled): %v", err)
+			debugPrint(log.Printf, levelWarning, "warning: db connect failed (ingestion will spool but DB insert disabled): %v", err)
 		} else {
 			s.db = db
 			if ensure := getEnsureSchemaFn(db); ensure != nil {
@@ -207,9 +207,13 @@ func SetupIngestionWithConfig(parent context.Context, cfg IngestConfig) (*Ingest
 						cancel()
 						return nil, fmt.Errorf("ensure schema failed (required): %w", err)
 					}
-					log.Printf("warning: ensure schema failed: %v", err)
+					debugPrint(log.Printf, levelWarning, "warning: ensure schema failed: %v", err)
 				}
 			}
+		if err != nil {
+			debugPrint(log.Printf, levelInfo, "warning: database has no max seq")
+		}
+
 		}
 	} else if cfg.DBRequired {
 		cancel()
@@ -312,8 +316,10 @@ func (s *IngestService) validationWorker(workerID int) {
 				continue
 			}
 
-			_, ok = ParseIngestLineStrict(tenantID, msg.Line)
-			if !ok {
+//			_, ok = ParseIngestLineStrict(tenantID, msg.Line)
+//			if !ok {
+			_, mt := ParseIngestLine(tenantID, msg.Line)
+			if mt != reCompl {
 				atomic.AddUint64(&s.linesDropped, 1)
 				continue
 			}
@@ -419,7 +425,6 @@ func (s *IngestService) spoolerLoop() {
 				atomic.AddUint64(&s.linesDropped, 1)
 				continue
 			}
-
 			sp.seq++
 			seq := sp.seq
 			debugPrint(log.Printf, levelDebug, "Sequence number assigned (%d)\n", seq);
@@ -472,10 +477,13 @@ func (s *IngestService) getOrOpenSpool(spools map[string]*tenantSpool, tenantID 
 
 	seq, err := readLastSeqFromSpoolTail(path)
 	if err != nil {
-		if s.db != nil {
-			if dbSeq, derr := s.dbMaxSeq(s.ctx, tenantID); derr == nil && dbSeq > seq {
+		debugPrint(log.Printf, levelInfo, "cant fetch seq from spool files for Tenant %s\n", tenantID)
+	}
+	if s.db != nil {
+		if dbSeq, derr := s.dbMaxSeq(s.ctx, tenantID); derr == nil && dbSeq > seq {
+			if seq < dbSeq {
 				seq = dbSeq
-				debugPrint(log.Printf, levelInfo, "Tenant %s initial seq is %d\n", tenantID, seq)
+				debugPrint(log.Printf, levelInfo, "db ishigher than spool, Tenant %s new initial seq is %d\n", tenantID, seq)
 			}
 		}
 	}
@@ -567,7 +575,11 @@ func (s *IngestService) dbWorker(workerID int) {
 				return
 			}
 
-			ev := ParseLegacyLineBestEffort(msg.TenantID, msg.Line, msg.Transport.String())
+//			ev := ParseLegacyLineBestEffort(msg.TenantID, msg.Line, msg.Transport.String(), msg.PeerIP.String())
+			ev, _ := ParseIngestLine(msg.TenantID, msg.Line)
+			tmp := msg.PeerIP.String()
+			ev.Transport = msg.PeerIP.String()
+			ev.SrcIP = &tmp
 
 			for {
 				err := s.dbInsertWithSeq(s.ctx, msg, ev)
@@ -827,6 +839,13 @@ func minInt(a, b int) int {
 	return b
 }
 
+func maxInt64(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func peerAddrIP(a net.Addr) netip.Addr {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", a)
 
@@ -841,6 +860,7 @@ func peerAddrIP(a net.Addr) netip.Addr {
 	return ip
 }
 
+/*
 func ParseIngestLineStrict(tenantID, line string) (Event, bool) {
 	debugPrint(log.Printf, levelCrazy, "Args=%s, %d\n", tenantID, line)
 
@@ -891,9 +911,10 @@ func ParseIngestLineStrict(tenantID, line string) (Event, bool) {
 		Cmd: &payload,
 		RawLine: line,
 	}
+	debugPrint(log.Printf, levelDebug, "ev=%v\n", ev)
 	return ev, true
 }
-
+*/
 type ensureSchemaFn func(context.Context) error
 type insertEventWithSeqFn func(context.Context, Event, int64) error
 type maxSeqFn func(context.Context, string) (int64, error)

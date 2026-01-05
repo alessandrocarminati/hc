@@ -947,6 +947,17 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 	cfg.RawAddr    = opts.Cfg.Server.ListnerClear.Addr
 	cfg.TLSEnabled = opts.Cfg.Server.ListnerTLS.Enabled
 	cfg.TLSAddr    = opts.Cfg.Server.ListnerTLS.Addr
+	if cfg.TLSEnabled {
+		cert, err := tls.LoadX509KeyPair(opts.Cfg.TLS.CertFile, opts.Cfg.TLS.KeyFile)
+		if err != nil {
+			return cfg, fmt.Errorf("ingestion: ssl creation error (%w)\n", err)
+		}
+		tlsConfig := tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion: tls.VersionTLS12,
+		}
+		cfg.TLSConfig  = &tlsConfig
+	}
 	cfg.PostgresDSN = opts.Cfg.DB.PostgresDSN
 	cfg.DefaultTenantID = opts.Cfg.Tenancy.DefaultTenantID
 	cfg.RawCIDRRules, err  = parseCfgCidrLst(opts.Cfg.Tenancy.TrustedSources)

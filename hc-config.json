@@ -5,7 +5,7 @@
             "addr": "0.0.0.0:1234"
         },
         "listner_tls": {
-            "enabled": false,
+            "enabled": true,
             "addr": "0.0.0.0:1235"
         },
         "listner_search": {
@@ -44,8 +44,8 @@
         ]
     },
     "tls": {
-        "cert_file": "cert.crt",
-        "key_file": "cert.key"
+        "cert_file": "auto.crt",
+        "key_file": "auto.key"
     },
     "limits": {
         "max_line_bytes": 655536

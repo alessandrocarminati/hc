@@ -4,3 +4,6 @@ history*
 generated.go
 hc.app
 trash/
+spool/
+*.key
+*.crt

@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -316,8 +315,6 @@ func (s *IngestService) validationWorker(workerID int) {
 				continue
 			}
 
-//			_, ok = ParseIngestLineStrict(tenantID, msg.Line)
-//			if !ok {
 			_, mt := ParseIngestLine(tenantID, msg.Line)
 			if mt != reCompl {
 				atomic.AddUint64(&s.linesDropped, 1)
@@ -575,7 +572,6 @@ func (s *IngestService) dbWorker(workerID int) {
 				return
 			}
 
-//			ev := ParseLegacyLineBestEffort(msg.TenantID, msg.Line, msg.Transport.String(), msg.PeerIP.String())
 			ev, _ := ParseIngestLine(msg.TenantID, msg.Line)
 			tmp := msg.PeerIP.String()
 			ev.Transport = msg.Transport.String()
@@ -860,61 +856,6 @@ func peerAddrIP(a net.Addr) netip.Addr {
 	return ip
 }
 
-/*
-func ParseIngestLineStrict(tenantID, line string) (Event, bool) {
-	debugPrint(log.Printf, levelCrazy, "Args=%s, %d\n", tenantID, line)
-
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return Event{}, false
-	}
-
-	m := reIngestStrict.FindStringSubmatch(line)
-	if m == nil {
-		return Event{}, false
-	}
-
-	tsStr := m[1]
-	sid := m[2]
-	host := m[3]
-	cwd := m[4]
-	payload := m[5]
-
-	t, err := time.Parse("20060102.150405", tsStr)
-	if err != nil {
-		return Event{}, false
-	}
-
-	host = strings.TrimSpace(host)
-	if host == "" || strings.ContainsAny(host, " \t\r\n") {
-		return Event{}, false
-	}
-
-	if sid == "" {
-		return Event{}, false
-	}
-	sid = strings.ToLower(strings.TrimSpace(sid))
-
-	cwd = strings.TrimSpace(cwd)
-
-	payload = strings.TrimSpace(payload)
-	if payload == "" {
-		return Event{}, false
-	}
-
-	ev := Event{
-		TenantID: tenantID,
-		TSClient: &t,
-		SessionID: sid,
-		HostFQDN: host,
-		CWD: &cwd,
-		Cmd: &payload,
-		RawLine: line,
-	}
-	debugPrint(log.Printf, levelDebug, "ev=%v\n", ev)
-	return ev, true
-}
-*/
 type ensureSchemaFn func(context.Context) error
 type insertEventWithSeqFn func(context.Context, Event, int64) error
 type maxSeqFn func(context.Context, string) (int64, error)

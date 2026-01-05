@@ -28,14 +28,18 @@
     "db": {
         "postgres_dsn": "host=dbs.hqhome163.com port=5432 user=alessandro password=<password> dbname=history sslmode=disable"
     },
-    "history_file": "history.txt",
     "tenancy": {
         "default_tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
         "trusted_sources": [
             {
                 "CIDR": "10.1.0.0/16",
-                "tenant_id": "main",
+                "tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
                 "note": "default"
+            },
+            {
+                "CIDR": "127.0.0.0/8",
+                "tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
+                "note": "loopback"
             }
         ]
     },

@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"strings"
 	"log"
+	"context"
+	"os/signal"
+	"syscall"
 )
 
 var bufsiz int = 4 * 1048576
@@ -32,68 +35,7 @@ func doRunServe(version string, args []string) {
 	serve(opts)
 }
 
-func ResolveOptions(cfg Config, cl CommandLine, verstr string) (*Options, error) {
-	o := Options{
-		Cfg:	     cfg,
-		LogLevel:	cl.LogLevel,
-	}
-
-	if !ValidateServer(o.Cfg.Server.ListnerClear) {
-		return  nil, fmt.Errorf("Invalid clear listner")
-	}
-
-	if !ValidateServer(o.Cfg.Server.ListnerTLS) {
-		return  nil, fmt.Errorf("Invalid tls listner")
-	}
-
-	if !ValidateServer(o.Cfg.Server.ListnerSearch) {
-		return  nil, fmt.Errorf("Invalid search listner")
-	}
-
-	if !ValidateServer(o.Cfg.Server.HTTP) {
-		return  nil, fmt.Errorf("Invalid http listner")
-	}
-
-	if !ValidateServer(o.Cfg.Server.HTTPS) {
-		return  nil, fmt.Errorf("Invalid https listner")
-	}
-
-	if !ValidateTags(o.Cfg.Parser) {
-		return  nil, fmt.Errorf("Invalid tag configuration")
-	}
-
-	if o.Cfg.HistoryFile == "" {
-		f, err := os.CreateTemp("", "tmp")
-		if err != nil {
-			return  nil, fmt.Errorf("cant create temp file")
-		}
-		defer f.Close()
-		o.Cfg.HistoryFile = f.Name()
-	}
-
-	o.LogLevel = cl.LogLevel
-	o.Verstr = verstr
-
-	return &o, nil
-}
-
-func ValidateTags(Parser ParserConfig) bool {
-	debugPrint(log.Printf, levelCrazy, "Args=%v\n", Parser)
-	if Parser.TagsFile != "" {
-		return true
-	}
-	return false
-}
-
-func ValidateServer(s ListenerConfig) bool {
-	debugPrint(log.Printf, levelCrazy, "Args=%v\n", s)
-
-	if s.Enabled && s.Addr == "" {
-		return false
-	}
-	return true
-}
-
+/*
 func serve(opts *Options) {
 
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", opts)
@@ -106,7 +48,6 @@ func serve(opts *Options) {
 		panic(err)
 	}
 	go cwdata(history, ch)
-//	go http_present(history, opts)
 	ln, err := net.Listen("tcp", opts.Cfg.Server.ListnerClear.Addr)
 	if err != nil {
 		panic(err)
@@ -122,6 +63,31 @@ func serve(opts *Options) {
 
 	debugPrint(log.Printf, levelDebug, "exit\n")
 	close(ch)
+}
+*/
+
+func serve(opts *Options) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v\n", opts)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ing, err := SetupIngestion(ctx, opts)
+	if err != nil {
+		log.Fatalf("failed to start ingestion: %v", err)
+	}
+	defer ing.Stop()
+
+	waitForShutdown(cancel)
+
+	debugPrint(log.Printf, levelDebug, "exit\n")
+}
+
+func waitForShutdown(cancel context.CancelFunc) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	<-ch
+	cancel()
 }
 
 func receivedata(rd net.Conn, ch chan data) {

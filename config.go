@@ -10,7 +10,6 @@ type Config struct {
 	Server          ServerConfig  `json:"server"`
 	Parser          ParserConfig  `json:"parser"`
 	DB              DBConfig      `json:"db"`
-	HistoryFile     string        `json:"history_file"`
 	Tenancy         TenancyConfig `json:"tenancy"`
 	TLS             TLSConfig     `json:"tls"`
 	Limits          LimitsConfig  `json:"limits"`

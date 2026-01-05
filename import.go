@@ -40,7 +40,7 @@ func doImport(version string, args []string) {
 	defer db.Close()
 
 	debugPrint(log.Printf, levelDebug, "make sure schema exists\n")
-	if err := db.VerifySchema(ctx); err != nil {
+	if err := db.EnsureSchema(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -62,7 +62,7 @@ func doImport(version string, args []string) {
 	inserted, skipped, err := db.ImportHistoryFile(
 		ctx,
 		opts.Cfg.Tenancy.DefaultTenantID,
-		opts.Cfg.HistoryFile,
+		opts.LegacyHistoryFile,
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

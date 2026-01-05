@@ -14,6 +14,7 @@ import (
 	"time"
 	"log"
 	_ "github.com/lib/pq"
+	"github.com/google/uuid"
 )
 
 type DB struct {
@@ -30,6 +31,7 @@ type Event struct {
 	RawLine   string
 	Transport string
 	SrcIP     *string
+	ParseOK   bool
 }
 
 type StreamExportOptions struct {
@@ -78,7 +80,7 @@ func sanitizeUTF8(s string) string {
 	return strings.ToValidUTF8(s, "�")
 }
 
-func (d *DB) VerifySchema(ctx context.Context) error {
+func (d *DB) EnsureSchema(ctx context.Context) error {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", ctx)
 	stmts := []string{
 		`create extension if not exists pg_trgm;`,
@@ -166,6 +168,7 @@ func (d *DB) GetTenantName(ctx context.Context, tenantID string) (string, bool, 
 
 func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inserted int, skipped int, err error) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %s, %s\n", ctx, tenantID, path)
+	transport := "import"
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, 0, fmt.Errorf("open history file: %w", err)
@@ -184,9 +187,9 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 
 	stmt, err := tx.PrepareContext(ctx, `
 		insert into cmd_events(
-			tenant_id, ts_client, session_id, host_fqdn, cwd, cmd, transport, raw_line, parse_ok
+			seq, tenant_id, ts_client, session_id, host_fqdn, cwd, cmd, transport, raw_line, parse_ok
 		) values (
-			$1, $2, $3, $4, $5, $6, 'import', $7, $8
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		);
 	`)
 	if err != nil {
@@ -199,21 +202,29 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 	buf := make([]byte, 0, 64*1024)
 	sc.Buffer(buf, 2*1024*1024)
 
+	seq, err := d.MaxSeq(ctx, tenantID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("cant recover seq (%v)", err)
+	}
+
 	for sc.Scan() {
+		seq = seq +1
 		line := strings.TrimRight(sc.Text(), "\r\n")
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
-		ev := ParseLegacyLineBestEffort(tenantID, line)
+		ev := ParseLegacyLineBestEffort(tenantID, line, transport)
 
 		res, e := stmt.ExecContext(ctx,
+			seq,
 			ev.TenantID,
 			ev.TSClient,
 			ev.SessionID,
 			ev.HostFQDN,
 			ev.CWD,
 			ev.Cmd,
+			transport,
 			ev.RawLine,
 			ev.TSClient != nil,
 		)
@@ -240,12 +251,12 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 	return inserted, skipped, nil
 }
 
-func ParseLegacyLineBestEffort(tenantID, line string) Event {
+func ParseLegacyLineBestEffort(tenantID, line, transport string) Event {
 	debugPrint(log.Printf, levelCrazy, "Args=%s, %s\n", tenantID, line)
 	ev := Event{
 		TenantID:   tenantID,
 		RawLine:   line,
-		Transport: "import",
+		Transport: transport,
 	}
 
 	s := strings.TrimRight(line, "\r\n")
@@ -512,4 +523,80 @@ func sanitizeForOneLine(s string) string {
 	s = strings.ReplaceAll(s, "\r", `\r`)
 	s = strings.ReplaceAll(s, "\n", `\n`)
 	return strings.TrimRight(s, " \t")
+}
+
+func (db *DB) MaxSeq(ctx context.Context, tenantID string) (int64, error) {
+	var seq sql.NullInt64
+	debugPrint(log.Printf, levelDebug, "Args: %v, %s\n", ctx, tenantID )
+
+	err := db.SQL.QueryRowContext(ctx, `
+		select max(seq) from cmd_events where tenant_id = $1
+	`, tenantID).Scan(&seq)
+	if err != nil {
+		return 0, err
+	}
+	if !seq.Valid {
+		return 0, nil
+	}
+	return seq.Int64, nil
+}
+
+func (db *DB) InsertEventWithSeq(ctx context.Context, ev Event, seq int64) error {
+	debugPrint(log.Printf, levelDebug, "Args: %v, %v, %d----> %s\n", ctx, ev, seq, ev.TenantID )
+
+	TSClient := nullTime(ev.TSClient)
+	CWD := nullString(ev.CWD)
+	Cmd := nullString(ev.Cmd)
+	SrcIP := nullString(ev.SrcIP)
+	u, err := uuid.Parse(ev.TenantID)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.SQL.ExecContext(ctx, `
+		insert into cmd_events
+			(tenant_id, seq, ts_client, session_id, host_fqdn, cwd, cmd, raw_line, src_ip, transport, parse_ok)
+		values
+			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		on conflict (tenant_id, seq) do nothing
+	`,
+		u,
+		seq,
+		&TSClient,
+		ev.SessionID,
+		ev.HostFQDN,
+		&CWD,
+		&Cmd,
+		ev.RawLine,
+		&SrcIP,
+		ev.Transport,
+		ev.ParseOK,
+	)
+	return err
+}
+
+func nullString(s *string) sql.NullString {
+	if s == nil {
+		return sql.NullString{Valid: false}
+	}
+	if *s == "" {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{
+		String: *s,
+		Valid:  true,
+	}
+}
+
+func nullTime(t *time.Time) sql.NullTime {
+	if t == nil {
+		return sql.NullTime{Valid: false}
+	}
+	if t.IsZero() {
+		return sql.NullTime{Valid: false}
+	}
+	return sql.NullTime{
+		Time:  *t,
+		Valid: true,
+	}
 }

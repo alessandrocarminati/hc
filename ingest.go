@@ -578,7 +578,7 @@ func (s *IngestService) dbWorker(workerID int) {
 //			ev := ParseLegacyLineBestEffort(msg.TenantID, msg.Line, msg.Transport.String(), msg.PeerIP.String())
 			ev, _ := ParseIngestLine(msg.TenantID, msg.Line)
 			tmp := msg.PeerIP.String()
-			ev.Transport = msg.PeerIP.String()
+			ev.Transport = msg.Transport.String()
 			ev.SrcIP = &tmp
 
 			for {

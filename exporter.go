@@ -139,7 +139,7 @@ func parseExportQuery(r *http.Request, maxRows int) (exportQuery, error) {
 	}
 
 	if q.Order == "" {
-		q.Order = "ingest_desc"
+		q.Order = "ingest_asc"
 	}
 	switch q.Color {
 	case "", "never":

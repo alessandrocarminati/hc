@@ -6,16 +6,10 @@ SOURCES := $(wildcard *.go)
 
 all: hc-$(MAJOR).$(MINOR)
 
-generated.go: template.html
-	@echo "package main" >generated.go
-	@echo "var tmplStr = \`" >>generated.go
-	@cat template.html >>generated.go
-	@echo "\`" >>generated.go
-
-hc-$(MAJOR).$(MINOR): $(SOURCES) generated.go
+hc-$(MAJOR).$(MINOR): $(SOURCES)
 	go build -ldflags "-w -X 'main.Version=$(MAJOR)' -X 'main.Build=$(MINOR)' -X 'main.Hash=$(CHASH)' -X 'main.Dirty=$(DIRTY)'" -o  hc-$(MAJOR).$(MINOR).$(DIRTY)
 	rm -f hc.app
 	ln -s hc-$(MAJOR).$(MINOR).$(DIRTY) hc.app
 
 clean:
-	rm -rf  hc-* generated.go
+	rm -rf  hc-*

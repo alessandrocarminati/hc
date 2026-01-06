@@ -552,7 +552,7 @@ func (db *DB) MaxSeq(ctx context.Context, tenantID string) (int64, error) {
 }
 
 func (db *DB) InsertEventWithSeq(ctx context.Context, ev Event, seq int64) error {
-	debugPrint(log.Printf, levelDebug, "Args: %v, %v, %d ----> %s\n", ctx, ev, seq, ev.TenantID )
+	debugPrint(log.Printf, levelDebug, "Args: %v, %v, %d\n", ctx, ev, seq)
 
 	TSClient := nullTime(ev.TSClient)
 	CWD := nullString(ev.CWD)

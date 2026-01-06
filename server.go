@@ -11,6 +11,7 @@ import (
 	"context"
 	"os/signal"
 	"syscall"
+	"net/http"
 )
 
 var bufsiz int = 4 * 1048576
@@ -35,37 +36,6 @@ func doRunServe(version string, args []string) {
 	serve(opts)
 }
 
-/*
-func serve(opts *Options) {
-
-	debugPrint(log.Printf, levelCrazy, "Args=%v\n", opts)
-	ch := make(chan data, 100)
-	var conn net.Conn
-	var err error
-
-	history, err := NewHistory(opts.Cfg.Parser.TagsFile, opts.Cfg.HistoryFile)
-	if err != nil {
-		panic(err)
-	}
-	go cwdata(history, ch)
-	ln, err := net.Listen("tcp", opts.Cfg.Server.ListnerClear.Addr)
-	if err != nil {
-		panic(err)
-	}
-	for {
-		debugPrint(log.Printf, levelDebug, "Connection\n")
-		conn, err = ln.Accept()
-		if err != nil {
-			panic( err)
-			}
-		go receivedata(conn, ch)
-		}
-
-	debugPrint(log.Printf, levelDebug, "exit\n")
-	close(ch)
-}
-*/
-
 func serve(opts *Options) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", opts)
 
@@ -77,6 +47,19 @@ func serve(opts *Options) {
 		log.Fatalf("failed to start ingestion: %v", err)
 	}
 	defer ing.Stop()
+
+
+	if ing.db != nil {
+		mux := http.NewServeMux()
+		RegisterExportHandlers(mux, opts, ing.db)
+		srv := &http.Server{
+			Addr:    opts.Cfg.Server.HTTP.Addr,
+			Handler: mux,
+		}
+		log.Fatal(srv.ListenAndServe())
+	} else {
+		 debugPrint(log.Printf, levelWarning, "DB not available. only ingestion service\n")
+	}
 
 	waitForShutdown(cancel)
 

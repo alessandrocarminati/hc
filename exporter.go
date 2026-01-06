@@ -64,6 +64,20 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	cd := connDataFromRequest(r)
+
+	authPipeline := []authFn{
+		func(c connData) authRes { return AuthAllow }, // stub allow-all
+	}
+
+	switch runAuthPipeline(cd, authPipeline) {
+	case AuthAllow:
+		// proceed
+	default:
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	tenantID := strings.TrimSpace(s.Opts.Cfg.Export.Unsecure.TenantID)
 	if tenantID == "" {
 		http.Error(w, "export_unsecure tenant not configured", http.StatusInternalServerError)

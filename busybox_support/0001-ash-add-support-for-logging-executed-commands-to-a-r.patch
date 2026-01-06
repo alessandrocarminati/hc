@@ -1,0 +1,245 @@
+From 2ee2e7ddcba5d5215c58a1472bd00548e26d7f4a Mon Sep 17 00:00:00 2001
+From: Alessandro Carminati <alessandro.carminati@gmail.com>
+Date: Fri, 27 Jun 2025 14:05:21 +0200
+Subject: [PATCH] ash: add support for logging executed commands to a remote
+ server
+
+This commit adds functionality to the ash shell that sends each executed command
+to a remote logging server over TCP, enabling remote auditing and session tracking.
+
+The design is inspired by the tacacs2 approach used in network devices. This is
+particularly useful in embedded Linux environments replacing traditional routers,
+where audit trails are essential.
+
+Unlike bash, ash does not support PROMPT_COMMAND. This implementation fills that
+gap using internal hooks in the shell.
+
+The feature is controlled via three environment variables:
+
+  - SESSIONID_ : unique identifier for the shell session
+  - LOG_RHOST  : remote log server hostname or IP address
+  - LOG_RPORT  : remote log server TCP port
+
+When these variables are set, each command entered is sent to the specified
+logging server, prepended with the session ID.
+
+This enhancement is lightweight and optional, and does not impact users who
+do not configure the environment variables
+
+Signed-off-by: Alessandro Carminati <acarmina@redhat.com>
+---
+ include/libbb.h       |   7 +++
+ libbb/Config.src      |  10 ++++
+ libbb/Kbuild.src      |   1 +
+ libbb/lineedit.c      |   3 ++
+ libbb/loggers_utils.c | 114 ++++++++++++++++++++++++++++++++++++++++++
+ shell/ash.c           |   3 ++
+ 6 files changed, 138 insertions(+)
+ create mode 100644 libbb/loggers_utils.c
+
+diff --git a/include/libbb.h b/include/libbb.h
+index 01cdb1bdc..870b9f5d5 100644
+--- a/include/libbb.h
++++ b/include/libbb.h
+@@ -2003,6 +2003,9 @@ void free_line_input_t(line_input_t *n) FAST_FUNC;
+ #else
+ # define free_line_input_t(n) free(n)
+ #endif
++# if ENABLE_FEATURE_SEND_COMMAND_REMOTE
++void loggers_utils_set_var_lookup(void *func);
++# endif
+ /*
+  * maxsize must be >= 2.
+  * Returns:
+@@ -2133,6 +2136,10 @@ enum {
+ 	PSSCAN_RUIDGID  = (1 << 21) * ENABLE_FEATURE_PS_ADDITIONAL_COLUMNS,
+ 	PSSCAN_TASKS	= (1 << 22) * ENABLE_FEATURE_SHOW_THREADS,
+ };
++# if ENABLE_FEATURE_SEND_COMMAND_REMOTE
++int rlog_this(const char *history_itm);
++# endif
++
+ //procps_status_t* alloc_procps_scan(void) FAST_FUNC;
+ void free_procps_scan(procps_status_t* sp) FAST_FUNC;
+ procps_status_t* procps_scan(procps_status_t* sp, int flags) FAST_FUNC;
+diff --git a/libbb/Config.src b/libbb/Config.src
+index b980f19a9..a6f58824d 100644
+--- a/libbb/Config.src
++++ b/libbb/Config.src
+@@ -202,6 +202,16 @@ config FEATURE_EDITING_SAVE_ON_EXIT
+ 	help
+ 	Save history on shell exit, not after every command.
+ 
++config  FEATURE_SEND_COMMAND_REMOTE
++	bool "Send last command to remote logger for audit"
++	default n
++	depends on FEATURE_EDITING_SAVEHISTORY
++	help
++	Send last command to remote logger for audit.
++	It is mandatory that LOG_RHOST and LOG_RPORT environment variables
++	are defined to specify the remote ip and port where send logs.
++	It alse needs the environment SESSIONID_ to be defined as sessionid.
++
+ config FEATURE_REVERSE_SEARCH
+ 	bool "Reverse history search"
+ 	default y
+diff --git a/libbb/Kbuild.src b/libbb/Kbuild.src
+index cb8d2c2ec..096a9f3e8 100644
+--- a/libbb/Kbuild.src
++++ b/libbb/Kbuild.src
+@@ -208,3 +208,4 @@ lib-$(CONFIG_FEATURE_CUT_REGEX) += xregcomp.o
+ 
+ # Add the experimental logging functionality, only used by zcip
+ lib-$(CONFIG_ZCIP) += logenv.o
++lib-$(CONFIG_FEATURE_SEND_COMMAND_REMOTE) += loggers_utils.o
+diff --git a/libbb/lineedit.c b/libbb/lineedit.c
+index 543a3f11c..8140f007a 100644
+--- a/libbb/lineedit.c
++++ b/libbb/lineedit.c
+@@ -1685,6 +1685,9 @@ static void remember_in_history(char *str)
+ 	/* i <= state->max_history-1 */
+ 	state->history[i++] = xstrdup(str);
+ 	/* i <= state->max_history */
++# if ENABLE_FEATURE_SEND_COMMAND_REMOTE
++	rlog_this(state->history[i-1]);
++# endif
+ 	state->cur_history = i;
+ 	state->cnt_history = i;
+ # if ENABLE_FEATURE_EDITING_SAVEHISTORY && !ENABLE_FEATURE_EDITING_SAVE_ON_EXIT
+diff --git a/libbb/loggers_utils.c b/libbb/loggers_utils.c
+new file mode 100644
+index 000000000..d1266e8a1
+--- /dev/null
++++ b/libbb/loggers_utils.c
+@@ -0,0 +1,114 @@
++/*
++ * This code allows remote logging aof the commands.
++ *
++ * Copyright (c) 2025 Alessandro Carminati <acarmina@redhat.com>
++ *
++ * Licensed under GPLv2 or later, see file LICENSE in this source tree.
++ */
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++#include <unistd.h>
++#include <netinet/in.h>
++#include <arpa/inet.h>
++#include <netdb.h>
++#include <sys/socket.h>
++
++#define SESSION_ID_ENV "SESSIONID_"
++#define SESSION_LEN 9
++#define SESSION_RHOST "LOG_RHOST"
++#define SESSION_RPORT "LOG_RPORT"
++
++typedef const char* (*loggers_utils_var_lookup_t)(const char *name);
++
++void get_timestamp(char *, size_t);
++int send_log(const char *, const char *, const char *);
++int rlog_this(const char *);
++void loggers_utils_set_var_lookup(void *func);
++
++static loggers_utils_var_lookup_t loggers_utils_lookup_var;
++
++void loggers_utils_set_var_lookup(void *func) {
++	loggers_utils_lookup_var = (loggers_utils_var_lookup_t) func;
++}
++
++void get_timestamp(char *buf, size_t len) {
++	time_t now = time(NULL);
++	struct tm *tm_info = localtime(&now);
++	strftime(buf, len, "%Y%m%d.%H%M%S", tm_info);
++}
++
++int send_log(const char *line, const char *host, const char *port_str) {
++	int sockfd;
++	struct addrinfo hints, *res, *p;
++
++	memset(&hints, 0, sizeof(hints));
++	hints.ai_family = AF_UNSPEC;
++	hints.ai_socktype = SOCK_STREAM;
++
++	if (getaddrinfo(host, port_str, &hints, &res) != 0) {
++		fprintf(stderr, "send_log: cant' resolve host in %s\n",
++			SESSION_RHOST);
++		return -1;
++	}
++
++	for (p = res; p != NULL; p = p->ai_next) {
++		sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
++		if (sockfd < 0) continue;
++		if (connect(sockfd, p->ai_addr, p->ai_addrlen) == 0) break;
++		close(sockfd);
++	}
++
++	if (p == NULL) {
++		fprintf(stderr, "send_log: Unable to connect to %s:%s\n",
++			host, port_str);
++		freeaddrinfo(res);
++		return -1;
++	}
++
++	ssize_t len = strlen(line);
++	if (send(sockfd, line, len, 0) != len) {
++		fprintf(stderr, "send_log: Unable to send data\n");
++		close(sockfd);
++		freeaddrinfo(res);
++		return -1;
++	}
++
++	close(sockfd);
++	freeaddrinfo(res);
++	return 0;
++}
++
++int rlog_this(const char *history_itm) {
++	char timestamp[32], hostname[64];
++	char *sess_id, *r_ip, *r_port;
++	char logline[1500];
++
++	if (!loggers_utils_lookup_var) return -1;
++
++	sess_id = loggers_utils_lookup_var(SESSION_ID_ENV);
++	if (!sess_id || (strlen(sess_id) > 9)) return 1;
++
++	r_ip = loggers_utils_lookup_var(SESSION_RHOST);
++	if (!r_ip) return -1;
++
++	r_port = loggers_utils_lookup_var(SESSION_RPORT);
++	if (!r_port) return -1;
++
++	if (!atoi(r_port)) return -1;
++
++	get_timestamp(timestamp, sizeof(timestamp));
++	gethostname(hostname, sizeof(hostname));
++
++	snprintf(logline, sizeof(logline), "%s - %s - %s > %s\n",
++			 timestamp, sess_id, hostname, history_itm);
++
++	if (send_log(logline, r_ip, r_port)!=0){
++		fprintf(stderr, "rlog_this: can't send log to remote.\n");
++		return -2;
++	};
++
++	return 0;
++}
+diff --git a/shell/ash.c b/shell/ash.c
+index bbd730770..e021defd1 100644
+--- a/shell/ash.c
++++ b/shell/ash.c
+@@ -9780,6 +9780,9 @@ setinteractive(int on)
+ 			did_banner = 1;
+ 		}
+ #endif
++# if ENABLE_FEATURE_SEND_COMMAND_REMOTE
++		loggers_utils_set_var_lookup(&lookupvar);
++# endif
+ #if ENABLE_FEATURE_EDITING
+ 		if (!line_input_state) {
+ 			line_input_state = new_line_input_t(FOR_SHELL | WITH_PATH_LOOKUP);
+-- 
+2.51.0
+

@@ -21,10 +21,6 @@
             "addr": "0.0.0.0:8443"
         }
     },
-    "parser": {
-        "tags_file": "tags.json",
-        "regex_prefix": ""
-    },
     "db": {
         "postgres_dsn": "host=dbs.hqhome163.com port=5432 user=alessandro password=<password> dbname=history sslmode=disable"
     },

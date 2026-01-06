@@ -8,7 +8,6 @@ import (
 
 type Config struct {
 	Server          ServerConfig  `json:"server"`
-	Parser          ParserConfig  `json:"parser"`
 	DB              DBConfig      `json:"db"`
 	Tenancy         TenancyConfig `json:"tenancy"`
 	TLS             TLSConfig     `json:"tls"`
@@ -27,11 +26,6 @@ type ServerConfig struct {
 type ListenerConfig struct {
 	Enabled         bool   `json:"enabled"`
 	Addr            string `json:"addr"`
-}
-
-type ParserConfig struct {
-	TagsFile        string `json:"tags_file"`
-	RegexPrefix     string `json:"regex_prefix"`
 }
 
 type DBConfig struct {
@@ -84,10 +78,6 @@ func DefaultConfig() Config {
 			ListnerTLS:     ListenerConfig{Enabled: false, Addr: ":12346"},
 			ListnerSearch:  ListenerConfig{Enabled: true, Addr: ":12347"},
 			HTTP:           ListenerConfig{Enabled: true, Addr: ":8080"},
-		},
-		Parser: ParserConfig{
-			TagsFile:      "tags.json",
-			RegexPrefix:   "",
 		},
 		DB: DBConfig{
 			PostgresDSN: "",

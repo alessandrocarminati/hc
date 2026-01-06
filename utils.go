@@ -62,22 +62,10 @@ func ResolveOptions(cfg Config, cl CommandLine, verstr string) (*Options, error)
 		return  nil, fmt.Errorf("Invalid https listner")
 	}
 
-	if !ValidateTags(o.Cfg.Parser) {
-		return  nil, fmt.Errorf("Invalid tag configuration")
-	}
-
 	o.LogLevel = cl.LogLevel
 	o.Verstr = verstr
 	o.LegacyHistoryFile = cl.HistoryFile
 	return &o, nil
-}
-
-func ValidateTags(Parser ParserConfig) bool {
-	debugPrint(log.Printf, levelCrazy, "Args=%v\n", Parser)
-	if Parser.TagsFile != "" {
-		return true
-	}
-	return false
 }
 
 func ValidateServer(s ListenerConfig) bool {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net"
 	"io"
 	"fmt"
 	"log"
@@ -41,8 +42,18 @@ type exportQuery struct {
 	Color string
 }
 
+func getIP(r *http.Request) string {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
 func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Request) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", w, r)
 	if r.Method != http.MethodGet {
+		debugPrint(log.Printf, levelInfo, "not allowed method request form %s\n", getIP(r))
 		w.Header().Set("Allow", http.MethodGet)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return

@@ -26,7 +26,7 @@ type data struct {
 func doRunServe(version string, args []string) {
 	opts, err := getRuntimeConf(version, args)
 	if err != nil {
-		fmt.Printf("%v", err)
+		fmt.Printf("%v\n", err)
 		os.Exit(1)
 	}
 

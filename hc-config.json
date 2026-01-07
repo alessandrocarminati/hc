@@ -1,70 +1,108 @@
 {
-    "server": {
-        "listner_clear": {
-            "enabled": true,
-            "addr": "0.0.0.0:1234"
-        },
-        "listner_tls": {
-            "enabled": true,
-            "addr": "0.0.0.0:1235"
-        },
-        "listner_search": {
-            "enabled": true,
-            "addr": "0.0.0.0:1236"
-        },
-        "http": {
-            "enabled": true,
-            "addr": "0.0.0.0:8080"
-        },
-        "https": {
-            "enabled": false,
-            "addr": "0.0.0.0:8443"
-        }
+  "server": {
+    "ingest_clear": {
+      "enabled": true,
+      "addr": "0.0.0.0:1234",
+      "auth": [
+        "none"
+      ],
+      "tenants": [
+        "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
+        "00000000-1111-2222-3333-444444444444"
+      ]
     },
-    "db": {
-        "postgres_dsn": "host=dbs.hqhome163.com port=5432 user=alessandro password=<password> dbname=history sslmode=disable"
+    "ingest_tls": {
+      "enabled": true,
+      "addr": "0.0.0.0:1235",
+      "auth": [
+        "cert",
+        "apikey"
+      ],
+      "tenants": [
+        "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
+        "00000000-1111-2222-3333-444444444444"
+      ]
     },
-    "tenancy": {
-        "default_tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
-        "trusted_sources": [
-            {
-                "CIDR": "10.1.0.0/16",
-                "tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
-                "note": "default"
-            },
-            {
-                "CIDR": "127.0.0.0/8",
-                "tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
-                "note": "loopback"
-            }
-        ]
+    "http": {
+      "enabled": true,
+      "addr": "0.0.0.0:8080",
+      "auth": [
+        "none"
+      ],
+      "tenants": [
+        "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a"
+      ]
     },
-    "tls": {
-        "cert_file": "auto.crt",
-        "key_file": "auto.key"
-    },
-    "limits": {
-        "max_line_bytes": 655536
-    },
-    "Export": {
-        "Enabled": true,
-        "MaxRows": 200000,
-        "MaxSeconds": 30,
-        "Unsecure": {
-            "Enabled": true,
-            "TenantID": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a"
-        },
-        "CIDR": {
-            "Enabled": false,
-            "TenantID": ""
-        },
-        "HMAC": {
-            "Enabled": false,
-            "TenantID": ""
-        },
-        "SSL": {
-            "Enabled": false,
-            "TenantID": ""
-        }
+    "https": {
+      "enabled": true,
+      "addr": "0.0.0.0:8443",
+      "auth": [
+        "cert",
+        "apikey"
+      ],
+      "tenants": [
+        "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
+        "00000000-1111-2222-3333-444444444444"
+      ]
     }
+  },
+  "db": {
+    "postgres_dsn": "host=dbs.hqhome163.com port=5432 user=alessandro password=<password> dbname=history sslmode=disable"
+  },
+  "acl": [
+    {
+      "id": "tenant_main_acl",
+      "rules": [
+        {
+          "CIDR": "10.1.0.0/16",
+          "action": "allow",
+          "name": "Local net"
+        },
+        {
+          "CIDR": "127.0.0.0/8",
+          "action": "allow",
+          "name": "Loopback"
+        },
+        {
+          "CIDR": "10.0.0.0/8",
+          "action": "deny",
+          "name": "intranet"
+        }
+      ]
+    },
+    {
+      "id": "tenant1_acl",
+      "rules": [
+        {
+          "CIDR": "0.0.0.0/0",
+          "action": "allow",
+          "name": "any"
+        }
+      ]
+    }
+  ],
+  "tenants": [
+    {
+      "tenantID": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
+      "tenant_name": "Main",
+      "acl": "tenant_main_acl",
+      "cert": "main.crt"
+    },
+    {
+      "tenantID": "00000000-1111-2222-3333-444444444444",
+      "tenant_name": "tenant1",
+      "acl": "tenant1_acl",
+      "cert": "tenant1.crt"
+    }
+  ],
+  "globals": {
+    "identity": {
+       "cert_file": "auto.crt",
+       "key_file": "auto.key"
+    },
+    "max_line_bytes": 65536,
+    "max_rows": 200000,
+    "max_seconds": 30,
+    "default_tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a"
+  }
 }

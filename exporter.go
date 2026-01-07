@@ -59,7 +59,7 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if !s.Opts.Cfg.Export.Enabled || !s.Opts.Cfg.Export.Unsecure.Enabled {
+	if !s.Opts.Cfg.Server.IngestClear.Enabled {
 		http.Error(w, "export_unsecure disabled", http.StatusNotFound)
 		return
 	}
@@ -78,13 +78,13 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	tenantID := strings.TrimSpace(s.Opts.Cfg.Export.Unsecure.TenantID)
+	tenantID := strings.TrimSpace(s.Opts.Cfg.Globals.DefaultTenantID)
 	if tenantID == "" {
-		http.Error(w, "export_unsecure tenant not configured", http.StatusInternalServerError)
+		http.Error(w, "export_unsecure no default tenantID", http.StatusInternalServerError)
 		return
 	}
 
-	q, err := parseExportQuery(r, s.Opts.Cfg.Export.MaxRows)
+	q, err := parseExportQuery(r, s.Opts.Cfg.Globals.MaxRows)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -96,7 +96,7 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	maxSec := s.Opts.Cfg.Export.MaxSeconds
+	maxSec := s.Opts.Cfg.Globals.MaxSeconds
 	if maxSec <= 0 {
 		maxSec = 30
 	}

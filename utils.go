@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"fmt"
 )
 
 type Options struct {
@@ -38,28 +37,13 @@ func getRuntimeConf(version string, args []string) (*Options, error) {
 
 func ResolveOptions(cfg Config, cl CommandLine, verstr string) (*Options, error) {
 	o := Options{
-		Cfg:	     cfg,
-		LogLevel:	cl.LogLevel,
+		Cfg:	   cfg,
+		LogLevel:  cl.LogLevel,
 	}
 
-	if !ValidateServer(o.Cfg.Server.ListnerClear) {
-		return  nil, fmt.Errorf("Invalid clear listner")
-	}
-
-	if !ValidateServer(o.Cfg.Server.ListnerTLS) {
-		return  nil, fmt.Errorf("Invalid tls listner")
-	}
-
-	if !ValidateServer(o.Cfg.Server.ListnerSearch) {
-		return  nil, fmt.Errorf("Invalid search listner")
-	}
-
-	if !ValidateServer(o.Cfg.Server.HTTP) {
-		return  nil, fmt.Errorf("Invalid http listner")
-	}
-
-	if !ValidateServer(o.Cfg.Server.HTTPS) {
-		return  nil, fmt.Errorf("Invalid https listner")
+	err := cfg.validate()
+	if  err != nil {
+		return  nil, err
 	}
 
 	o.LogLevel = cl.LogLevel

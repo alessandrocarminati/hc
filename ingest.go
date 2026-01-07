@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 )
-
 type Transport uint8
 
 const (
@@ -36,6 +35,8 @@ func (t Transport) String() string {
 	}
 }
 
+type authFunc func(msg RawMsg) string
+
 type IngestParsed struct {
 	TsStr    string
 	Time     time.Time
@@ -49,7 +50,8 @@ type IngestParsed struct {
 type CIDRTenantRule struct {
 	Prefix   netip.Prefix
 	TenantID string
-	Note     string
+	Action   bool
+	Name     string
 }
 
 type IngestConfig struct {
@@ -70,7 +72,8 @@ type IngestConfig struct {
 
 	// tenancy
 	DefaultTenantID string
-	RawCIDRRules    []CIDRTenantRule
+	RawCIDRRules    map[string][]CIDRTenantRule
+	AuthLst		map[Transport][]AuthMode
 
 	// spooling
 	SpoolDir            string
@@ -83,22 +86,23 @@ type IngestConfig struct {
 }
 
 type IngestService struct {
-	cfg IngestConfig
-	db  *DB
+	cfg           IngestConfig
+	db            *DB
+	authFuncs     map[string]authFunc
 
 	// channels between stages
-	rawCh   chan RawMsg
-	spoolCh chan ValidatedMsg
-	dbCh    chan SeqMsg
+	rawCh         chan RawMsg
+	spoolCh       chan ValidatedMsg
+	dbCh          chan SeqMsg
 
 	// cancellation
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
 
 	// listeners
-	rawLn net.Listener
-	tlsLn net.Listener
+	rawLn         net.Listener
+	tlsLn         net.Listener
 
 	// metrics
 	linesAccepted uint64
@@ -109,10 +113,10 @@ type IngestService struct {
 }
 
 type RawMsg struct {
-	Line      string
-	PeerIP    netip.Addr
-	Received  time.Time
-	Transport Transport
+	Line          string
+	PeerIP        netip.Addr
+	Received      time.Time
+	Transport     Transport
 }
 
 type ValidatedMsg struct {
@@ -310,7 +314,7 @@ func (s *IngestService) validationWorker(workerID int) {
 
 			tenantID, ok := s.resolveTenant(msg)
 			if !ok {
-				debugPrint(log.Printf, levelDebug, "Not allowed / no tenant mapping\n")
+				debugPrint(log.Printf, levelWarning, "Not allowed / no tenant mapping\n")
 				atomic.AddUint64(&s.linesDropped, 1)
 				continue
 			}
@@ -341,32 +345,87 @@ func (s *IngestService) validationWorker(workerID int) {
 	}
 }
 
+func (s *IngestService) initAuthFuncs() {
+	if s.authFuncs == nil {
+		s.authFuncs = make(map[string]authFunc, 8)
+	}
+
+	// "none"
+	s.authFuncs[string(AuthNone)] = func(msg RawMsg) string {
+		dt := strings.TrimSpace(s.cfg.DefaultTenantID)
+		if dt == "" {
+			return ""
+		}
+		return dt
+	}
+
+	// cert
+	s.authFuncs[string(AuthCert)] = func(msg RawMsg) string {
+		return ""
+	}
+
+	// apikey
+	s.authFuncs[string(AuthAPIKey)] = func(msg RawMsg) string {
+		return ""
+	}
+}
+
+func (s *IngestService) ResolveTenantFromAuthList(msg RawMsg, authLst []AuthMode) (string, bool) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, authLst=%v\n", msg, authLst)
+
+	if len(authLst) == 0 {
+		debugPrint(log.Printf, levelWarning, "auth list is empty; dropped\n")
+		return "", false
+	}
+
+	if s.authFuncs == nil {
+		s.initAuthFuncs()
+	}
+
+	for _, m := range authLst {
+		mode := strings.ToLower(strings.TrimSpace(string(m)))
+		if mode == "" {
+			debugPrint(log.Printf, levelDebug, "Empty element in auth list, is this intended?\n")
+			continue
+		}
+
+		fn := s.authFuncs[mode]
+		if fn == nil {
+			debugPrint(log.Printf, levelWarning, "no auth func for mode=%q; skipping\n", mode)
+			continue
+		}
+
+		tenantID := fn(msg)
+		if tenantID != "" {
+			debugPrint(log.Printf, levelDebug, "auth matched mode=%q tenant=%s\n", mode, tenantID)
+			return tenantID, true
+		}
+
+		debugPrint(log.Printf, levelDebug, "auth no-match mode=%q\n", mode)
+	}
+
+	debugPrint(log.Printf, levelDebug, "auth failed: no mode matched\n")
+	return "", false
+}
+
 func (s *IngestService) resolveTenant(msg RawMsg) (string, bool) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", msg)
 
 	switch msg.Transport {
 	case TransportRaw:
 		debugPrint(log.Printf, levelDebug, "Raw TCP: message received.\n")
-		for _, r := range s.cfg.RawCIDRRules {
-			if r.Prefix.Contains(msg.PeerIP) {
-				if strings.TrimSpace(r.TenantID) == "" {
-					debugPrint(log.Printf, levelDebug, "Raw TCP: dropped. not belongto any trusted tenant\n");
-					return "", false
-				}
-				debugPrint(log.Printf, levelDebug, "Raw TCP: Accepted.\n");
-				return r.TenantID, true
-			}
-		}
-		debugPrint(log.Printf, levelDebug, "Raw TCP: dropped. No trusted source\n");
-		return "", false
-	case TransportTLS:
-		debugPrint(log.Printf, levelDebug, "TLS: message received.\n")
-		if strings.TrimSpace(s.cfg.DefaultTenantID) == "" {
-			debugPrint(log.Printf, levelDebug, "TLS: dropped. not belongto any trusted tenant\n");
+		tenantID, ok := s.ResolveTenantFromAuthList(msg, s.cfg.AuthLst[msg.Transport])
+		if !ok {
 			return "", false
 		}
-		debugPrint(log.Printf, levelDebug, "TLS: Accepted.\n");
-		return s.cfg.DefaultTenantID, true
+		return tenantID, true
+	case TransportTLS:
+		debugPrint(log.Printf, levelDebug, "TLS: message received.\n")
+		tenantID, ok := s.ResolveTenantFromAuthList(msg, s.cfg.AuthLst[msg.Transport])
+		if !ok {
+			return "", false
+		}
+		return tenantID, true
 	default:
 		debugPrint(log.Printf, levelWarning, "Unknown transportP: dropped.\n");
 		return "", false
@@ -687,21 +746,26 @@ func (s *IngestService) acceptLoop(ln net.Listener, tr Transport) {
 				return
 			}
 
-			if tr == TransportRaw && !s.isRawPeerAllowed(peerIP) {
+/* can not reject any message at this stage. perhaps a global acl could do. leave the code if I ever add it.
+			if tr == TransportRaw && s.isRawPeerAllowed(peerIP)=="deny" {
 				debugPrint(log.Printf, levelNotice, "message from %s transport %s has been dropped\n", peerIP.String(), tr.String())
 				return
 			}
-
+*/
 			s.readConnLines(c, peerIP, tr)
 		}(conn)
 	}
 }
 
-func (s *IngestService) isRawPeerAllowed(ip netip.Addr) bool {
+func (s *IngestService) isRawPeerAllowed(ip netip.Addr, tenantID string) bool {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", ip)
-	debugPrint(log.Printf, levelCrazy, "RawCIDRRules=%v\n", s.cfg.RawCIDRRules )
+//        RawCIDRRules    map[string][]CIDRTenantRule
 
-	for _, r := range s.cfg.RawCIDRRules {
+	acl, ok := s.cfg.RawCIDRRules[tenantID]
+	if !ok {
+		return false
+	}
+	for _, r := range acl {
 		if r.Prefix.Contains(ip) {
 			return true
 		}
@@ -943,12 +1007,17 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 	var cfg IngestConfig
 	var err error
 
-	cfg.RawEnabled = opts.Cfg.Server.ListnerClear.Enabled
-	cfg.RawAddr    = opts.Cfg.Server.ListnerClear.Addr
-	cfg.TLSEnabled = opts.Cfg.Server.ListnerTLS.Enabled
-	cfg.TLSAddr    = opts.Cfg.Server.ListnerTLS.Addr
+	cfg.RawEnabled = opts.Cfg.Server.IngestClear.Enabled
+	cfg.RawAddr    = opts.Cfg.Server.IngestClear.Addr
+	cfg.TLSEnabled = opts.Cfg.Server.IngestTLS.Enabled
+	cfg.TLSAddr    = opts.Cfg.Server.IngestTLS.Addr
+	cfg.AuthLst    = make(map[Transport][]AuthMode, 2)
+
+	cfg.AuthLst[TransportRaw] = opts.Cfg.Server.IngestClear.Auth
+	cfg.AuthLst[TransportTLS] = opts.Cfg.Server.IngestTLS.Auth
+
 	if cfg.TLSEnabled {
-		cert, err := tls.LoadX509KeyPair(opts.Cfg.TLS.CertFile, opts.Cfg.TLS.KeyFile)
+		cert, err := tls.LoadX509KeyPair(opts.Cfg.Globals.Identity.CertFile, opts.Cfg.Globals.Identity.KeyFile)
 		if err != nil {
 			return cfg, fmt.Errorf("ingestion: ssl creation error (%w)\n", err)
 		}
@@ -959,8 +1028,8 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 		cfg.TLSConfig  = &tlsConfig
 	}
 	cfg.PostgresDSN = opts.Cfg.DB.PostgresDSN
-	cfg.DefaultTenantID = opts.Cfg.Tenancy.DefaultTenantID
-	cfg.RawCIDRRules, err  = parseCfgCidrLst(opts.Cfg.Tenancy.TrustedSources)
+	cfg.DefaultTenantID = opts.Cfg.Globals.DefaultTenantID
+	cfg.RawCIDRRules, err  = parseCfgCidrLst(opts)
 	if err != nil {
 		return cfg, fmt.Errorf("ingestion: error parsing CIDR (%w)\n", err)
 	}
@@ -970,14 +1039,67 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 	}
 	return cfg, nil
 }
-func parseCfgCidrLst(cidrs []TrustedSource) ([]CIDRTenantRule, error) {
-	var rules []CIDRTenantRule
-	for _, addr := range cidrs {
-		prefix, err := netip.ParsePrefix(addr.CIDR)
-		if err != nil {
-			return nil, fmt.Errorf("invalid CIDR %s(%s): %w", addr.CIDR, addr.Note, err)
+
+func parseCfgCidrLst(opts *Options) (map[string][]CIDRTenantRule, error) {
+	// Build ACL lookup by ID
+	aclByID := make(map[string]ACL, len(opts.Cfg.ACL))
+	for _, acl := range opts.Cfg.ACL {
+		if acl.ID == "" {
+			continue
 		}
-		rules = append(rules, CIDRTenantRule{prefix, addr.TenantID, addr.Note})
+		aclByID[acl.ID] = acl
 	}
-	return rules, nil
+
+	result := make(map[string][]CIDRTenantRule, len(opts.Cfg.Tenants))
+
+	for _, tenant := range opts.Cfg.Tenants {
+		if tenant.TenantID == "" {
+			return nil, fmt.Errorf("tenant with empty tenantID")
+		}
+		if tenant.ACL == "" {
+			return nil, fmt.Errorf("tenant %q has empty acl reference", tenant.TenantID)
+		}
+
+		acl, ok := aclByID[tenant.ACL]
+		if !ok {
+			return nil, fmt.Errorf(
+				"tenant %q references unknown acl %q",
+				tenant.TenantID, tenant.ACL,
+			)
+		}
+
+		rules := make([]CIDRTenantRule, 0, len(acl.Rules))
+		for _, r := range acl.Rules {
+			prefix, err := netip.ParsePrefix(r.CIDR)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"tenant %q acl %q invalid CIDR %q: %w",
+					tenant.TenantID, acl.ID, r.CIDR, err,
+				)
+			}
+
+			var action bool
+			switch strings.ToLower(r.Action) {
+			case "allow":
+				action = true
+			case "deny":
+				action = false
+			default:
+				return nil, fmt.Errorf(
+					"tenant %q acl %q rule %q has invalid action %q",
+					tenant.TenantID, acl.ID, r.Name, r.Action,
+				)
+			}
+
+			rules = append(rules, CIDRTenantRule{
+				Prefix: prefix,
+				Action: action,
+				Name:   r.Name,
+			})
+		}
+
+		result[tenant.TenantID] = rules
+	}
+
+	return result, nil
 }

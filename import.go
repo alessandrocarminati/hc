@@ -18,7 +18,7 @@ func doImport(version string, args []string) {
 
 	debugPrint(log.Printf, levelDebug, "check config consistency\n")
 
-	if opts.Cfg.Tenancy.DefaultTenantID == "" {
+	if opts.Cfg.Globals.DefaultTenantID == "" {
 		fmt.Fprintln(os.Stderr, "DefaultTenantID is required when using -import")
 		os.Exit(2)
 	}
@@ -46,14 +46,14 @@ func doImport(version string, args []string) {
 	}
 
 	debugPrint(log.Printf, levelDebug, "fetch TenantName\n")
-	TenantName, exists, err := db.GetTenantName(ctx, opts.Cfg.Tenancy.DefaultTenantID)
+	TenantName, exists, err := db.GetTenantName(ctx, opts.Cfg.Globals.DefaultTenantID)
 	if err != nil || !exists{
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	debugPrint(log.Printf, levelDebug, "EnsureTenant\n")
-	if err := db.EnsureTenant(ctx, opts.Cfg.Tenancy.DefaultTenantID, TenantName); err != nil {
+	if err := db.EnsureTenant(ctx, opts.Cfg.Globals.DefaultTenantID, TenantName); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -61,7 +61,7 @@ func doImport(version string, args []string) {
 	debugPrint(log.Printf, levelDebug, "populating\n")
 	inserted, skipped, err := db.ImportHistoryFile(
 		ctx,
-		opts.Cfg.Tenancy.DefaultTenantID,
+		opts.Cfg.Globals.DefaultTenantID,
 		opts.LegacyHistoryFile,
 	)
 	if err != nil {

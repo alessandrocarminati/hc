@@ -695,7 +695,7 @@ func (s *IngestService) startRawListener() error {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		debugPrint(log.Printf, levelError, "ingest raw listening on %s", s.cfg.RawAddr)
+		debugPrint(log.Printf, levelInfo, "ingest raw listening on %s", s.cfg.RawAddr)
 		s.acceptLoop(ln, TransportRaw)
 	}()
 	return nil
@@ -716,7 +716,7 @@ func (s *IngestService) startTLSListener() error {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		debugPrint(log.Printf, levelError, "ingest tls listening on %s", s.cfg.TLSAddr)
+		debugPrint(log.Printf, levelInfo, "ingest tls listening on %s", s.cfg.TLSAddr)
 		s.acceptLoop(ln, TransportTLS)
 	}()
 	return nil

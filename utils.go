@@ -2,12 +2,17 @@ package main
 
 import (
 	"log"
+
+	"github.com/google/uuid"
+
 )
 
 type Options struct {
 	Cfg               Config
 	LogLevel          DebugLevels
 	LegacyHistoryFile string
+	AKTenantID        uuid.UUID
+	AKUserID          uuid.UUID
 	Verstr            string
 }
 
@@ -49,6 +54,8 @@ func ResolveOptions(cfg Config, cl CommandLine, verstr string) (*Options, error)
 	o.LogLevel = cl.LogLevel
 	o.Verstr = verstr
 	o.LegacyHistoryFile = cl.HistoryFile
+	o.AKUserID = cl.AKUserID
+	o.AKTenantID = cl.AKTenantID
 	return &o, nil
 }
 

@@ -35,7 +35,7 @@ func (t Transport) String() string {
 	}
 }
 
-type authFunc func(msg RawMsg) string
+type authFunc func(msg *RawMsg) string
 
 type IngestParsed struct {
 	TsStr    string
@@ -56,33 +56,34 @@ type CIDRTenantRule struct {
 
 type IngestConfig struct {
 	// listeners
-	RawEnabled bool
-	RawAddr    string
+	RawEnabled	bool
+	RawAddr		string
 
-	TLSEnabled bool
-	TLSAddr    string
-	TLSConfig  *tls.Config
+	TLSEnabled	bool
+	TLSAddr		string
+	TLSConfig	*tls.Config
 
 	// worker counts / queues
 	ValidateWorkers int
 	DBWorkers       int
 	QueueDepth      int
 
-	MaxLineBytes int
+	MaxLineBytes	int
 
 	// tenancy
 	DefaultTenantID string
 	RawCIDRRules    map[string][]CIDRTenantRule
 	AuthLst		map[Transport][]AuthMode
+	Pepper		string
 
 	// spooling
-	SpoolDir            string
-	SpoolSyncEveryN     int
-	SpoolSyncEvery      time.Duration
+	SpoolDir	string
+	SpoolSyncEveryN	int
+	SpoolSyncEvery	time.Duration
 
 	// db
-	PostgresDSN string
-	DBRequired  bool
+	PostgresDSN	string
+	DBRequired	bool
 }
 
 type IngestService struct {
@@ -91,7 +92,7 @@ type IngestService struct {
 	authFuncs     map[string]authFunc
 
 	// channels between stages
-	rawCh         chan RawMsg
+	rawCh         chan *RawMsg
 	spoolCh       chan ValidatedMsg
 	dbCh          chan SeqMsg
 
@@ -183,7 +184,7 @@ func SetupIngestionWithConfig(parent context.Context, cfg IngestConfig) (*Ingest
 
 	s := &IngestService{
 		cfg:     cfg,
-		rawCh:   make(chan RawMsg, cfg.QueueDepth),
+		rawCh:   make(chan *RawMsg, cfg.QueueDepth),
 		spoolCh: make(chan ValidatedMsg, cfg.QueueDepth),
 		dbCh:    make(chan SeqMsg, cfg.QueueDepth),
 		ctx:     ctx,
@@ -351,7 +352,7 @@ func (s *IngestService) initAuthFuncs() {
 	}
 
 	// "none"
-	s.authFuncs[string(AuthNone)] = func(msg RawMsg) string {
+	s.authFuncs[string(AuthNone)] = func(msg *RawMsg) string {
 		dt := strings.TrimSpace(s.cfg.DefaultTenantID)
 		if dt == "" {
 			return ""
@@ -360,18 +361,17 @@ func (s *IngestService) initAuthFuncs() {
 	}
 
 	// cert
-	s.authFuncs[string(AuthCert)] = func(msg RawMsg) string {
+	s.authFuncs[string(AuthCert)] = func(msg *RawMsg) string {
 		return ""
 	}
 
-	// apikey
-	s.authFuncs[string(AuthAPIKey)] = func(msg RawMsg) string {
-		return ""
+	s.authFuncs[string(AuthAPIKey)] = func(msg *RawMsg) string {
+		return s.authAPIKeyFromLine(msg)
 	}
 }
 
-func (s *IngestService) ResolveTenantFromAuthList(msg RawMsg, authLst []AuthMode) (string, bool) {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, authLst=%v\n", msg, authLst)
+func (s *IngestService) ResolveTenantFromAuthList(msg *RawMsg, authLst []AuthMode) (string, bool) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, authLst=%v\n", *msg, authLst)
 
 	if len(authLst) == 0 {
 		debugPrint(log.Printf, levelWarning, "auth list is empty; dropped\n")
@@ -408,7 +408,7 @@ func (s *IngestService) ResolveTenantFromAuthList(msg RawMsg, authLst []AuthMode
 	return "", false
 }
 
-func (s *IngestService) resolveTenant(msg RawMsg) (string, bool) {
+func (s *IngestService) resolveTenant(msg *RawMsg) (string, bool) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", msg)
 
 	switch msg.Transport {
@@ -675,7 +675,7 @@ func (s *IngestService) dbInsertWithSeq(ctx context.Context, msg SeqMsg, ev Even
 }
 
 func (s *IngestService) dbMaxSeq(ctx context.Context, tenantID string) (int64, error) {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %d\n", ctx, tenantID)
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", ctx, tenantID)
 
 	if maxer := getMaxSeqFn(s.db); maxer != nil {
 		return maxer(ctx, tenantID)
@@ -832,6 +832,7 @@ func (s *IngestService) readConnLines(r io.Reader, peerIP netip.Addr, tr Transpo
 		return
 	}
 
+	debugPrint(log.Printf, levelDebug, "Ingested line is \"%s\"\n", line)
 	msg := RawMsg{
 		Line:      line,
 		PeerIP:    peerIP,
@@ -843,7 +844,7 @@ func (s *IngestService) readConnLines(r io.Reader, peerIP netip.Addr, tr Transpo
 	select {
 	case <-s.ctx.Done():
 		return
-	case s.rawCh <- msg:
+	case s.rawCh <- &msg:
 	}
 }
 
@@ -1029,6 +1030,7 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 	}
 	cfg.PostgresDSN = opts.Cfg.DB.PostgresDSN
 	cfg.DefaultTenantID = opts.Cfg.Globals.DefaultTenantID
+	cfg.Pepper = opts.Cfg.Globals.Pepper
 	cfg.RawCIDRRules, err  = parseCfgCidrLst(opts)
 	if err != nil {
 		return cfg, fmt.Errorf("ingestion: error parsing CIDR (%w)\n", err)

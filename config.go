@@ -85,6 +85,7 @@ type Globals struct {
 	MaxRows         int      `json:"max_rows"`
 	DefaultTenantID string   `json:"default_tenant_id"`
 	MaxSeconds      int      `json:"max_seconds"`
+	Pepper          string   `json:"apikey_pepper"`
 }
 
 type Identity struct {

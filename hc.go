@@ -40,6 +40,11 @@ var commands = []Command{
 		Handler:     doExport,
 		Description: "Exports a grep friendly history.",
 	},
+	{
+		Name:        "apy_key",
+		Handler:     doRunAPIKeyCreate,
+		Description: "generates an apikey for you",
+	},
 }
 
 func doHelp(version string, args []string) {
@@ -67,17 +72,11 @@ func main() {
 		os.Exit(2)
 	}
 
-	fmt.Printf("cmdIndx= %d\n", cmdIndx)
-	switch cmdIndx {
-		case 1:
-			doRunServe(verstr, os.Args[2:])
-		case 2:
-			doImport(verstr, os.Args[2:])
-		case 3:
-			doExport(verstr, os.Args[2:])
-		default:
-			fmt.Println("unknown command")
-			os.Exit(2)
+//	fmt.Printf("cmdIndx= %d\n", cmdIndx)
+	if cmdIndx != -1 {
+		commands[cmdIndx].Handler(verstr, os.Args[2:])
+	} else {
+		fmt.Println("unknown command")
 	}
 }
 

@@ -72,7 +72,6 @@ func main() {
 		os.Exit(2)
 	}
 
-//	fmt.Printf("cmdIndx= %d\n", cmdIndx)
 	if cmdIndx != -1 {
 		commands[cmdIndx].Handler(verstr, os.Args[2:])
 	} else {

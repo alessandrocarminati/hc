@@ -746,12 +746,6 @@ func (s *IngestService) acceptLoop(ln net.Listener, tr Transport) {
 				return
 			}
 
-/* can not reject any message at this stage. perhaps a global acl could do. leave the code if I ever add it.
-			if tr == TransportRaw && s.isRawPeerAllowed(peerIP)=="deny" {
-				debugPrint(log.Printf, levelNotice, "message from %s transport %s has been dropped\n", peerIP.String(), tr.String())
-				return
-			}
-*/
 			s.readConnLines(c, peerIP, tr)
 		}(conn)
 	}
@@ -759,7 +753,6 @@ func (s *IngestService) acceptLoop(ln net.Listener, tr Transport) {
 
 func (s *IngestService) isRawPeerAllowed(ip netip.Addr, tenantID string) bool {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", ip)
-//        RawCIDRRules    map[string][]CIDRTenantRule
 
 	acl, ok := s.cfg.RawCIDRRules[tenantID]
 	if !ok {

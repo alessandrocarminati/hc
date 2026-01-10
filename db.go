@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-//	"regexp"
 	"unicode/utf8"
 	"os"
 	"io"
@@ -214,7 +213,6 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 			continue
 		}
 
-//		ev := ParseLegacyLineBestEffort(tenantID, line, transport, "unknown")
 		ev, _ := ParseIngestLine(tenantID, line)
 		tmp := "unknown"
 		ev.Transport = transport
@@ -254,123 +252,6 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 	}
 	return inserted, skipped, nil
 }
-
-/*
-func ParseLegacyLineBestEffort(tenantID, line, transport, ipAddr  string) Event {
-	debugPrint(log.Printf, levelCrazy, "Args=%s, %s\n", tenantID, line)
-	ev := Event{
-		TenantID:   tenantID,
-		RawLine:   line,
-		Transport: transport,
-		SrcIP: &ipAddr,
-	}
-
-	s := strings.TrimRight(line, "\r\n")
-	s = strings.TrimSpace(s)
-	if s == "" {
-		ev.SessionID = "unknown"
-		ev.HostFQDN = "unknown"
-		return ev
-	}
-
-	// timestamp + session + host + cwd + payload
-	reCompl       := regexp.MustCompile(`^`(?P<ts>\d{8}\.\d{6})\s*-\s*(?:(?P<sid>[0-9a-f]{8})\s*-\s*)?(?P<host>[A-Za-z0-9._-]+)(?:\s+\[cwd=(?P<cwd>[^\]]+)\])?\s+>\s+(?P<payload>.*)$`)
-
-	// timestamp + session + host + payload
-	reSess        := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*([0-9a-fA-F]{8})\s*-\s*(.+?)\s{2,}(.*)$`)
-	reSessLoose   := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*([0-9a-fA-F]{8})\s*-\s*(.+?)\s+(.*)$`)
-
-	// timestamp + host + payload (no session)
-	reNoSess      := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*(.+?)\s{2,}(.*)$`)
-	reNoSessLoose := regexp.MustCompile(`^(\d{8}\.\d{6})\s*-\s*(.+?)\s+(.*)$`)
-
-	// timestamp only fallback
-	reTSOnly      := regexp.MustCompile(`^(\d{8}\.\d{6})\s+(.*)$`)
-
-	var (
-		tsStr    string
-		session  *string
-		host     *string
-		payload  string
-		parseOK  bool
-		hostNote bool
-	)
-
-	if m := reSess.FindStringSubmatch(s); m != nil {
-		tsStr = m[1]
-		session = strPtr(strings.TrimSpace(m[2]))
-		host = strPtr(strings.TrimSpace(m[3]))
-		payload = m[4]
-		parseOK = true
-	} else if m := reSessLoose.FindStringSubmatch(s); m != nil {
-		tsStr = m[1]
-		session = strPtr(strings.TrimSpace(m[2]))
-		host = strPtr(strings.TrimSpace(m[3]))
-		payload = m[4]
-		parseOK = true
-	} else if m := reNoSess.FindStringSubmatch(s); m != nil {
-		tsStr = m[1]
-		host = strPtr(strings.TrimSpace(m[2]))
-		payload = m[3]
-		parseOK = true
-	} else if m := reNoSessLoose.FindStringSubmatch(s); m != nil {
-		tsStr = m[1]
-		host = strPtr(strings.TrimSpace(m[2]))
-		payload = m[3]
-		parseOK = true
-	} else if m := reTSOnly.FindStringSubmatch(s); m != nil {
-		tsStr = m[1]
-		payload = m[2]
-		parseOK = false
-	} else {
-		ev.SessionID = "unknown"
-		ev.HostFQDN = "unknown"
-		return ev
-	}
-
-	if tsStr != "" {
-		if t, ok := parseTS(tsStr); ok {
-			ev.TSClient = &t
-		}
-	}
-
-	if session != nil && strings.TrimSpace(*session) != "" {
-		ev.SessionID = *session
-	} else {
-		ev.SessionID = "unknown"
-	}
-
-	if host != nil && strings.TrimSpace(*host) != "" {
-		h := strings.TrimSpace(*host)
-		if strings.ContainsAny(h, " \t") {
-			hostNote = true
-		}
-		ev.HostFQDN = h
-	} else {
-		ev.HostFQDN = "unknown"
-	}
-
-	cmdText := strings.TrimSpace(payload)
-	if strings.HasPrefix(cmdText, ">") {
-		cmdText = strings.TrimSpace(strings.TrimPrefix(cmdText, ">"))
-	}
-	if cmdText != "" {
-		ev.Cmd = strPtr(cmdText)
-	}
-
-	_ = parseOK
-	_ = hostNote
-
-	ev.RawLine = sanitizeUTF8(ev.RawLine)
-	if ev.Cmd != nil {
-		c := sanitizeUTF8(*ev.Cmd)
-		c = strings.TrimSpace(c)
-		ev.Cmd = &c
-	}
-
-	return ev
-}
-*/
 
 func parseTS(s string) (time.Time, bool) {
 	debugPrint(log.Printf, levelCrazy, "Args=%s\n", s)

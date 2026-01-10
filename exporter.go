@@ -50,6 +50,75 @@ func getIP(r *http.Request) string {
 	return ip
 }
 
+func parseBearerAPIKey(v string) (keyID, secret string) {
+	v = strings.TrimSpace(v)
+	if !strings.HasPrefix(strings.ToLower(v), "bearer ") {
+		return "", ""
+	}
+	tok := strings.TrimSpace(v[len("bearer "):])
+
+	debugPrint(log.Printf, levelDebug, "found %s\n", tok)
+	i := strings.IndexByte(tok, '.')
+	if i <= 0 || i == len(tok)-1 {
+		debugPrint(log.Printf, levelInfo, "Api key not usable\n")
+		return "", ""
+	}
+
+	return tok[:i], tok[i+1:]
+}
+
+func (s *ExportService) getTenantFromHTTPAPI(msg *http.Request) string{
+	debugPrint(log.Printf, levelCrazy, "ARG=%v\n", *msg)
+
+	debugPrint(log.Printf, levelDebug, "Extract Authorization header\n")
+	authz := msg.Header.Get("Authorization")
+	if authz == "" {
+		debugPrint(log.Printf, levelDebug, "no authorization header!\n")
+		return ""
+	}
+
+	debugPrint(log.Printf, levelDebug, "Expected: \"Authorization: <key_id>.<secret>\"\n")
+	keyID, secret := parseBearerAPIKey(authz)
+	if keyID == "" || secret == "" {
+		debugPrint(log.Printf, levelDebug, "no authorization header wrong format\n")
+		return ""
+	}
+
+	debugPrint(log.Printf, levelDebug, "Lookup api_keys row by key_id\n")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var (
+		tenantID string
+		keyHash  string
+		revoked  sql.NullTime
+	)
+
+	err := s.DB.SQL.QueryRowContext(ctx, `
+		select tenant_id::text, key_hash, revoked_at
+		from api_keys
+		where key_id = $1
+	`, keyID).Scan(&tenantID, &keyHash, &revoked)
+
+	if err != nil {
+		return ""
+	}
+
+	if revoked.Valid {
+		debugPrint(log.Printf, levelDebug, "key explicitly revoked\n")
+		return ""
+	}
+
+	debugPrint(log.Printf, levelDebug, "Verify secret\n")
+	pepper := strings.TrimSpace(s.Opts.Cfg.Globals.Pepper)
+	if !verifySecretSHA256(secret, pepper, keyHash) {
+		return ""
+	}
+
+	debugPrint(log.Printf, levelDebug, "SUCCESS: authenticated, tenant resolved\n")
+	return tenantID
+}
+
 func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Request) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", w, r)
 	if r.Method != http.MethodGet {
@@ -78,10 +147,18 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	tenantID := strings.TrimSpace(s.Opts.Cfg.Globals.DefaultTenantID)
+	tenantID := s.getTenantFromHTTPAPI(r)
+	debugPrint(log.Printf, levelCrazy, "tenantID from s.getTenantFromHTTPAPI = '%s'\n", tenantID)
 	if tenantID == "" {
-		http.Error(w, "export_unsecure no default tenantID", http.StatusInternalServerError)
-		return
+		debugPrint(log.Printf, levelInfo, "use DefaultTenantID if configured\n")
+		tenantID = strings.TrimSpace(s.Opts.Cfg.Globals.DefaultTenantID)
+		if tenantID == "" {
+			debugPrint(log.Printf, levelError, "no default tenantID\n")
+			http.Error(w, "export_unsecure no default tenantID", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		debugPrint(log.Printf, levelWarning, "**** Use of API key in clear text http is risky and will be deprecated soon ***\n")
 	}
 
 	q, err := parseExportQuery(r, s.Opts.Cfg.Globals.MaxRows)

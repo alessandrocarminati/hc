@@ -38,7 +38,8 @@
       "addr": "0.0.0.0:8443",
       "auth": [
         "cert",
-        "apikey"
+        "apikey",
+        "none"
       ],
       "tenants": [
         "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
@@ -103,6 +104,7 @@
     "max_line_bytes": 65536,
     "max_rows": 200000,
     "max_seconds": 30,
-    "default_tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a"
+    "default_tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
+    "apikey_pepper": "blabla"
   }
 }

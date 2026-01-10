@@ -131,12 +131,12 @@ note: api_key is shown only now; store it safely.
 ### Basic (plain TCP, no API key)
 
 ```
-export SESSION_ID_HC=$(date +%Y%m%d.%H%M%S | sha1sum | sed 's/^\(........\).*/\1/')
+export SESSION_ID_HC=$(date +%Y%m%d.%H%M%S | sha1sum | cut -c1-8)
 export PROMPT_COMMAND='echo "$(date +%Y%m%d.%H%M%S) - ${SESSION_ID_HC} - $(hostname --fqdn) [cwd=$(pwd)] > $(history -w /dev/stdout | tail -n1)" | nc hc.example.com 12345'
 ```
 ### TLS ingestion with API key (recommended)
 ```
-export SESSION_ID_HC=$(date +%Y%m%d.%H%M%S | sha1sum | sed 's/^\(........\).*/\1/')
+export SESSION_ID_HC=$(date +%Y%m%d.%H%M%S | sha1sum | cut -c1-8)
 export APIKEY_HC="hc_9f3a1c2d.QmFzZTY0U2VjcmV0U3RyaW5n"
 
 export PROMPT_COMMAND='echo "$(date +%Y%m%d.%H%M%S) - ${SESSION_ID_HC} - $(hostname --fqdn) [cwd=$(pwd)] > ]apikey[${APIKEY_HC}] $(history -w /dev/stdout | tail -n1)" | socat - OPENSSL:hc.example.com:1235,verify=0'

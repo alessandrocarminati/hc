@@ -1,200 +1,264 @@
-# HC - History Collector  
+# HC: History Collector
 
-HC collects shell command history from remote machines and stores it centrally.
-It's designed to be lightweight, easy to deploy, and easy to query with the same
-"grep brain" workflow you already use.
+`hc` is a lightweight command history collection service written in Go.
 
-HC is evolving from a text-file based collector into a database-backed service:
+It collects shell commands from remote systems over **plain TCP or TLS**,
+stores them in a **PostgreSQL database**, and allows **text-based export
+over HTTP/HTTPS** for grep-friendly usage.
 
-- **Ingestion:** accept command lines over **plain TCP** or **TLS** (server cert)
-- **Storage:** persist events into **PostgreSQL**
-- **Spool:** write a local per-tenant spool on disk to survive temporary DB issues
-- **Fetch:** export history as **plain text over HTTP/HTTPS** with grep-like filters
-- **Web UI:** work-in-progress (WIP). For now, export is the primary interface.
+The design goal is:
 
-## Architecture  
+* simple ingestion
+* append-only semantics
+* no client agents
+* grep-first workflows
+* multi-tenant ready
 
-### Data path (ingestion)  
-This is the intended workflow:
-1. Client sends a **single command event** as one newline-terminated record.
-2. HC validates and parses the record.
-3. HC assigns a **sequence number** (per-tenant) and:
-    - appends it to the **spool** (disk)
-    - inserts it into **PostgreSQL**
-4. The DB is the source of truth. The spool is a durability/bridge mechanism.
+## Architecture Overview
 
-### Why the spool exists  
+```
+(shell) -- TCP / TLS --> hc
+                         |
+                         +-- spool file (append-only, per-tenant)
+                         |
+                         +-- PostgreSQL (authoritative storage)
+                                |
+                                +-- HTTP(S) export (text)
+```
 
-The spool helps when:
-- The DB is temporarily unavailable
-- You want an append-only trail per tenant
-- You need deterministic replay semantics (per-tenant seq)
+Key points:
 
-#### Note  
+* The **database is authoritative**
+* The **spool file** exists as a safety net (temporary DB outages,
+  restart recovery)
+* No in-memory history representation is kept
+* All commands are preserved (no deduplication)
 
-Import-from-spool tooling is WIP; the spool format and flow are already in place.
-The import tool from old history exist and is working under the subcommand `import`.
+### Ingestion
+
+* **Plain TCP**: trusted network only as the command is cleartext
+* **TLS (SSL)**: recommended, your data is protected and you can
+  authenticate the server using SSL
+* BusyBox / ash supported
+* Bash supported
+
+### Export
+
+* **HTTP**: unauthenticated and clear text, can be CIDR-limited. The API key
+  can be used, but it is planned to be removed.
+* **HTTPS**: Ciphered authentication-capable using API key or /Client side
+  certificate (support in progress)
+* Output is **plain text**, ANSI colored and optimized for `grep`
+
+## Command Format (Ingestion Line)
+
+Each ingested command must be sent as **one single line**:
+```
+YYYYMMDD.HHMMSS - SESSIONID - host.example.com [cwd=/path] > command args...
+```
+Example
+```
+20240101.120305 - a1b2c3d4 - host.example.com [cwd=/root] > ls -la
+```
+
+### Session ID
+
+The session ID:
+* groups commands belonging to the same shell session
+* is generated client-side
+* is not guaranteed globally unique, but collisions are very unlikely
+
+## API Keys
+
+`hc` supports **API key basd tenant resolution**.
+
+An API key:
+* identifies a **tenant**
+* is embedded directly into the ingested command line
+* is **removed before storage** (never stored in DB or spool)
+
+### API key format
+```
+<key_id>.<secret>
+```
 Example:
 ```
-./hc.app import -config hc-config.json -historyFile history.txt
+hc_9f3a1c2d.QmFzZTY0U2VjcmV0U3RyaW5n
+```
+### Embedding API keys in ingestion lines
+
+The API key **must appear at the beginning of the command payload**, wrapped
+like this:
+```
+]apikey[<key_id>.<secret>] command...
 ```
 
-## Message format  
+Example:
+```
+]apikey[hc_9f3a1c2d.QmFzZTY0U2VjcmV0] make build
+```
 
-HC expects a single record per connection (or per TLS session), one line:
-```
-YYYYMMDD.HHMMSS - <session_id> - <host_fqdn> [cwd=<cwd>] > <command>
-```
 Notes:
-- `session_id` is 8 hex chars (client-generated)
-- `cwd` is optional but recommended
-- `<command>` may include redirects and `>`; the parser anchors on the header portion
+* The API key is used **only for authentication**
+* It is **stripped from the command** before storing
+* If authentication fails, falls back to the next authentication method.
+  If none succeeds, the line is dropped
+
+## Creating an API Key
+
+Use the `api_key` verb on the server:
+```
+./hc.app apy_key \
+        -config hc-config.json \
+        -loglevel info \
+        -api_tenantid 11111111-1111-1111-1111-111111111111 \
+        -api_userid 00000000-0000-0000-0000-000000000001
+```
+Output example:
+```
+tenant_id: 11111111-1111-1111-1111-111111111111
+key_id:    hc_9f3a1c2d
+api_key:   hc_9f3a1c2d.QmFzZTY0U2VjcmV0U3RyaW5n
+note: api_key is shown only now; store it safely.
+```
+**Notes:**
+* The secret is **never shown again**.
+* The current state does not allows to create tenantIDs or userIDs.
+  as for v0.3 the operation is still manual on the db
+
+## Client Setup (Bash)
+
+### Basic (plain TCP, no API key)
+
+```
+export SESSION_ID_HC=$(date +%Y%m%d.%H%M%S | sha1sum | sed 's/^\(........\).*/\1/')
+export PROMPT_COMMAND='echo "$(date +%Y%m%d.%H%M%S) - ${SESSION_ID_HC} - $(hostname --fqdn) [cwd=$(pwd)] > $(history -w /dev/stdout | tail -n1)" | nc hc.example.com 12345'
+```
+### TLS ingestion with API key (recommended)
+```
+export SESSION_ID_HC=$(date +%Y%m%d.%H%M%S | sha1sum | sed 's/^\(........\).*/\1/')
+export APIKEY_HC="hc_9f3a1c2d.QmFzZTY0U2VjcmV0U3RyaW5n"
+
+export PROMPT_COMMAND='echo "$(date +%Y%m%d.%H%M%S) - ${SESSION_ID_HC} - $(hostname --fqdn) [cwd=$(pwd)] > ]apikey[${APIKEY_HC}] $(history -w /dev/stdout | tail -n1)" | socat - OPENSSL:hc.example.com:1235,verify=0'
+```
+
+Notes:
+* `socat` is used instead of `nc` to support TLS
+* BusyBox `ash` users may need different hooks (see blog [link](https://carminatialessandro.blogspot.com/2025/06/logging-shell-commands-in-busybox-yes.html) )
+
+## Fetching History (Text Export)
+
+History is fetched as **plain text**, designed to be piped to `grep`.
 
 Example:
 ```
-20260106.104512 - 8f7f1b24 - myhost.example [cwd=/root] > ls -la
+wget "http://hc.example.com:8080/export_unsecure?grep1=qemu&grep2=aarch64&grep3=centos&session=8f7f1b24&color=always" -O -
 ```
 
-## Server configuration
+### Supported query parameters
 
-HC uses a JSON configuration file. Example (redacted):
+* `grep1`, `grep2`, `grep3`: regex filters (ordered)
+* `session`: restrict to a specific session ID
+* `color=always|never|auto` ANSI color text
+* `limit`
+* `order=asc|desc` (ingestion order)
 
-```
-{
-    "server": {
-        "listner_clear": {
-            "enabled": true,
-            "addr": "0.0.0.0:1234"
-        },
-        "listner_tls": {
-            "enabled": false,
-            "addr": "0.0.0.0:1235"
-        },
-        "http": {
-            "enabled": true,
-            "addr": "0.0.0.0:8080"
-        },
-        "https": {
-            "enabled": false,
-            "addr": "0.0.0.0:8443"
-        }
-    },
-    "db": {
-        "postgres_dsn": "host=... port=5432 user=... password=... dbname=history sslmode=disable"
-    },
-    "tenancy": {
-        "default_tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
-        "trusted_sources": [
-            {
-                "CIDR": "10.1.0.0/16",
-                "tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
-                "note": "default"
-            },
-            {
-                "CIDR": "127.0.0.0/8",
-                "tenant_id": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
-                "note": "loopback"
-            }
-        ]
-    },
-    "tls": {
-        "cert_file": "cert.crt",
-        "key_file": "cert.key"
-    },
-    "limits": {
-        "max_line_bytes": 655536
-    },
-    "Export": {
-        "Enabled": true,
-        "MaxRows": 200000,
-        "MaxSeconds": 30,
-        "Unsecure": {
-            "Enabled": true,
-            "TenantID": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a"
-        },
-        "SSL": {
-            "Enabled": false,
-            "TenantID": ""
-        }
-    }
-}
-```
-## Notes  
+Output format mirrors the ingestion format for familiarity.
 
-- `listner_clear`: plaintext ingestion, intended only for trusted sources (CIDR mapping)
-- `listner_tls`: TLS ingestion using `tls.cert_file` / `tls.key_file`
-- `http` / `https`: export endpoints
-- `Export.Unsecure`: export without auth (intended for controlled environments)
-- `Export.SSL`: export over HTTPS (auth/mTLS planned)
+## Configuration Highlights
+* Ingestion listeners: plain TCP + TLS
+* Export over HTTP / HTTPS
+* Authentication is **pluggable and ordered**
+* Tenants, ACLs, and auth are clearly separated
+(Postgres is currently the primary backend; SQLite support is planned as
+a lightweight alternative.)
 
-## Build  
-```  
-make
+## Configuration File (`hc-config.json`)
+`hc` is configured using a single JSON configuration file.
+The configuration defines listeners, authentication behavior, database
+backend, and operational limits.
+
+At a high level:
+* `server` defines all exposed services:
+    * `listner_clear` / `listner_tls` control command ingestion over plain
+      TCP and TLS.
+    * `http` / `https` control text export endpoints.
+    * Each service can be independently enabled and bound to a specific
+      address.
+    * Authentication methods (`auth`) are evaluated in order, and the first
+      successful one assigns the tenant.
+* `tenants` defines known tenants, their identifiers, and optional ACL rules.
+* `db` specifies the database backend (currently PostgreSQL).
+* `tls` specifies certificate and key files used by TLS ingestion and HTTPS
+  export.
+* `limits` defines safety limits (for example, maximum accepted line size).
+* `Export` controls global export limits (maximum rows and execution time).
+
+The configuration is intentionally explicit: authentication, authorization,
+and transport are configured separately to keep the model understandable and
+extensible. A full example configuration is provided in
+`hc-config.json` and is meant to be copied and edited rather than generated.
+
+## Database Quick Start (PostgreSQL)
+
+`hc` uses PostgreSQL as its authoritative storage backend.
+The schema is intentionally simple and append-only.
+
+To initialize the database:
 ```
-Run the server with your config:
-```
-./hc.app  serve -config hc-config.json -loglevel info
+createdb history
+psql history < pg_schema.sql
 ```
 
-## Ingestion (clients)  
-In bash based system the setup can be as easy as add a few lines in the `.bashrc` script.
- 
-### Plain TCP ingestion  
+The schema (`pg_schema.sql`) creates:
 
-Example:
+* `tenants`: logical isolation units
+* `cmd_events`: all ingested commands (authoritative history)
+* `api_keys`: API keys used for authentication
+* `app_users`: future-facing user metadata (not required for ingestion)
+
+After schema creation, at least one tenant must exist. You can insert it
+manually or let hc create it during bootstrap (depending on configuration).
+API keys are generated using the api_key verb and stored hashed in the
+database.
+
+The database is designed so that:
+* all ingested commands are preserved
+* ingestion order is maintained via a sequence number
+* old data from text only storage <v0.1.19 can be exported, filtered, and
+  reprocessed safely
+
+### Temporary `tenantID` and `userID` creation
+
+Since there's still no function to create tenants and users it must fall
+back to manual insertion into the database.
+
+Example
+
 ```
-HC_HOST="host.example.com"
-HC_PORT=12345
-export SESSIONID_=$(date +%Y%m%d.%H%M%S |sha1sum | sed -r 's/^(........).*/\1/')
-export PROMPT_COMMAND='echo "$(date +%Y%m%d.%H%M%S) - ${SESSIONID_} - $(hostname --fqdn) [cwd=$(pwd)] > $(history -w /dev/stdout | tail -n1)"|nc ${HC_HOST} ${HC_PORT}'
-```
-### TLS ingestion (server cert)
-
-Example (no verification in this example; see verify=0 for self signed simplicity):
-```
-HC_HOST="host.example.com"
-HC_PORT=12346
-export SESSIONID_=$(date +%Y%m%d.%H%M%S |sha1sum | sed -r 's/^(........).*/\1/')
-export PROMPT_COMMAND='echo "$(date +%Y%m%d.%H%M%S) - ${SESSIONID_} - $(hostname --fqdn) [cwd=$(pwd)] > $(history -w /dev/stdout | tail -n1)"|socat - OPENSSL:${HC_HOST}:${HC_PORT},verify=0'
+insert into tenants values ('11111111-1111-1111-1111-111111111111', 'default');
+insert into app_users (id, tenant_id, username, created_at) values ('00000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'username', now());
 ```
 
-TLS ingestion is supported. Client certificate authentication (mTLS) is planned for the HTTPS export and/or TLS ingestion.
+## Status (as for v0.3)
 
-#### Note
 
-For non **bash** systems things may vary.
-An example on how to have a similar feature in `ash` the **busybox** shell can be seen in the [`busybox_support`](busybox_support) directory.
+* [OK] Plain + TLS ingestion
+* [OK] PostgreSQL storage
+* [OK] API key authentication
+* [OK] Text export over HTTP
+* [WIP] HTTPS export auth (client certs, API keys)
+* [WIP] Web UI (optional, not a priority)
+* [WIP] SQLite support
 
-## Fetch / Export (plain text over HTTP/HTTPS)
+## Philosophy
+`hc` is intentionally **not**:
+* a SIEM
+* a real-time analytics engine
+* a web-heavy UI product
 
-HC exports history as text/plain. Filters are grep-like:
-- `grep1` is the primary filter and may be pushed down to SQL (when possible)
-- `grep2` and `grep3` further filter in-memory and are used for ANSI coloring
-- output stays text so it can be piped to `grep`, saved, etc.
+It is:
+* a **history sink**
+* optimized for **grep**
+* reliable, inspectable, and boring
 
-Example:
-```
-wget "http://host.example.com:8080/export_unsecure?grep1=qemu&grep2=aarch64&grep3=centos-stream-9&session=8f7f1b24&color=always" -O - -q
-```
-Parameters (current):
-- `grep1`, `grep2`, `grep3`: regular expressions
-- `session`: filter by session_id
-- `limit`: maximum number of lines (capped server-side)
-- `order`: ordering (ingest/client time) (WIP depending on build)
-- `color=always|never`: enable ANSI highlighting
-
-## Web interface (WIP)  
-
-A new web interface is planned but is not the current focus.
-The recommended workflow today is:
-
-- ingest commands continuously
-- fetch via `/export_unsecure` (or `/export_ssl` when enabled)
-- use terminal tools (grep, less -R, etc.) on the exported text
-
-## Security notes  
-
-- Plain TCP ingestion and unsecure export are intended for controlled networks only.
-- TLS ingestion is supported via server certificates.
-- HTTPS export and mTLS client certificate authentication are planned.
-- The system is currently mono-tenant by configuration, but it is designed to evolve into multi-tenant (tenant resolution/auth pipeline is being built).

@@ -98,8 +98,8 @@
   ],
   "globals": {
     "identity": {
-       "cert_file": "auto.crt",
-       "key_file": "auto.key"
+       "cert_file": "auto.hqhome163.com.crt",
+       "key_file": "auto.hqhome163.com.key"
     },
     "max_line_bytes": 65536,
     "max_rows": 200000,

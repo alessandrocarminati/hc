@@ -50,13 +50,48 @@ func serve(opts *Options) {
 
 
 	if ing.db != nil {
-		mux := http.NewServeMux()
-		RegisterExportHandlers(mux, opts, ing.db)
-		srv := &http.Server{
-			Addr:    opts.Cfg.Server.HTTP.Addr,
-			Handler: mux,
+		// HTTP
+		if opts.Cfg.Server.HTTP.Enabled {
+			mux := http.NewServeMux()
+			RegisterExportHandlers(mux, opts, ing.db)
+			httpSrv := &http.Server{
+				Addr:    opts.Cfg.Server.HTTP.Addr,
+				Handler: mux,
+			}
+			go func() {
+				debugPrint(log.Printf, levelInfo, "HTTP export listening on %s", httpSrv.Addr)
+				if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					debugPrint(log.Printf, levelError, "HTTP server error: %v", err)
+					cancel()
+				}
+			}()
 		}
-		log.Fatal(srv.ListenAndServe())
+
+		// HTTPS
+		if opts.Cfg.Server.HTTPS.Enabled {
+			muxHTTPS := http.NewServeMux()
+			RegisterExportHandlers(muxHTTPS, opts, ing.db)
+
+			httpsSrv := &http.Server{
+				Addr:    opts.Cfg.Server.HTTPS.Addr,
+				Handler: muxHTTPS,
+			}
+
+			cert := strings.TrimSpace(opts.Cfg.Globals.Identity.CertFile)
+			key := strings.TrimSpace(opts.Cfg.Globals.Identity.KeyFile)
+			if cert == "" || key == "" {
+				debugPrint(log.Printf, levelWarning, "HTTPS enabled but tls.cert_file/key_file not set; HTTPS server not started")
+			} else {
+				go func() {
+					debugPrint(log.Printf, levelInfo, "HTTPS export listening on %s", httpsSrv.Addr)
+					if err := httpsSrv.ListenAndServeTLS(cert, key); err != nil && err != http.ErrServerClosed {
+						debugPrint(log.Printf, levelError, "HTTPS server error: %v", err)
+						cancel()
+					}
+				}()
+			}
+		}
+
 	} else {
 		 debugPrint(log.Printf, levelWarning, "DB not available. only ingestion service\n")
 	}

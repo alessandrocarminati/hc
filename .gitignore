@@ -7,3 +7,4 @@ trash/
 spool/
 *.key
 *.crt
+producedapikey.txt

@@ -119,6 +119,42 @@ func (s *ExportService) getTenantFromHTTPAPI(msg *http.Request) string{
 	return tenantID
 }
 
+func (s *ExportService) getTenant(msg *http.Request) string{
+	debugPrint(log.Printf, levelCrazy, "Args: %v\n", msg)
+
+	authMethods := s.Opts.Cfg.Server.HTTP.Auth
+	TLSFlag := false
+	if msg.TLS != nil {
+		authMethods = s.Opts.Cfg.Server.HTTPS.Auth
+		TLSFlag = true
+	}
+	debugPrint(log.Printf, levelDebug, "Itearate over defined methods %v: TLS=%t\n", authMethods, TLSFlag)
+	for _, method := range authMethods {
+		switch AuthMode(strings.ToLower(string(method))) {
+			case AuthNone:
+				debugPrint(log.Printf, levelInfo, "Using default tenant\n")
+				t := strings.TrimSpace(s.Opts.Cfg.Globals.DefaultTenantID)
+				if t != "" {
+					return t
+				}
+			case AuthAPIKey:
+				debugPrint(log.Printf, levelDebug, "Using AuthAPIKey method\n")
+				if !TLSFlag {
+					 debugPrint(log.Printf, levelWarning, "== WARNING == use of APIKEY in cleartex request!\n")
+				}
+				t := s.getTenantFromHTTPAPI(msg)
+				if t != "" {
+					return t
+				}
+			case AuthCert:
+				debugPrint(log.Printf, levelDebug, "Using AuthCert method\n")
+			default:
+				debugPrint(log.Printf, levelWarning, "Warning unsupported auth method in the list\n")
+		}
+	}
+	return ""
+}
+
 func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Request) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", w, r)
 	if r.Method != http.MethodGet {
@@ -147,18 +183,11 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	tenantID := s.getTenantFromHTTPAPI(r)
-	debugPrint(log.Printf, levelCrazy, "tenantID from s.getTenantFromHTTPAPI = '%s'\n", tenantID)
+	tenantID := s.getTenant(r)
 	if tenantID == "" {
-		debugPrint(log.Printf, levelInfo, "use DefaultTenantID if configured\n")
-		tenantID = strings.TrimSpace(s.Opts.Cfg.Globals.DefaultTenantID)
-		if tenantID == "" {
-			debugPrint(log.Printf, levelError, "no default tenantID\n")
-			http.Error(w, "export_unsecure no default tenantID", http.StatusInternalServerError)
-			return
-		}
-	} else {
-		debugPrint(log.Printf, levelWarning, "**** Use of API key in clear text http is risky and will be deprecated soon ***\n")
+		debugPrint(log.Printf, levelError, "no default tenantID\n")
+		http.Error(w, "export_unsecure no default tenantID", http.StatusInternalServerError)
+		return
 	}
 
 	q, err := parseExportQuery(r, s.Opts.Cfg.Globals.MaxRows)

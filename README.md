@@ -150,9 +150,19 @@ Notes:
 
 History is fetched as **plain text**, designed to be piped to `grep`.
 
-Example:
+Examples:
+* http, default tenant
 ```
-wget "http://hc.example.com:8080/export_unsecure?grep1=qemu&grep2=aarch64&grep3=centos&session=8f7f1b24&color=always" -O -
+wget "http://hc.example.com:8080/export?grep1=qemu&grep2=aarch64&grep3=centos&session=8f7f1b24&color=always" -O -
+```
+* https, API Key
+```
+wget --header="Authorization: Bearer hc_9f3a1c2d.QmFzZTY0U2VjcmV0U3RyaW5n"  "https://hc.example.com:8443/export?grep1=make&grep2=test&color=always" -O - -q
+
+```
+* https, client certificate
+```
+wget --certificate=client.example.com.crt --private-key=client.example.com.key "https://hc.example.com:8443/export?grep1=make&grep2=test&color=always" -O - -q
 ```
 
 ### Supported query parameters
@@ -247,9 +257,9 @@ insert into app_users (id, tenant_id, username, created_at) values ('00000000-00
 * [OK] PostgreSQL storage
 * [OK] API key authentication
 * [OK] Text export over HTTP
-* [WIP] HTTPS export auth (client certs, API keys)
-* [WIP] Web UI (optional, not a priority)
+* [OK] HTTPS export auth (client certs, API keys)
 * [WIP] SQLite support
+* [WIP] Web UI (optional, not a priority)
 
 ## Philosophy
 `hc` is intentionally **not**:

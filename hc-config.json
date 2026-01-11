@@ -86,14 +86,12 @@
     {
       "tenantID": "9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a",
       "tenant_name": "Main",
-      "acl": "tenant_main_acl",
-      "cert": "main.crt"
+      "acl": "tenant_main_acl"
     },
     {
       "tenantID": "00000000-1111-2222-3333-444444444444",
       "tenant_name": "tenant1",
-      "acl": "tenant1_acl",
-      "cert": "tenant1.crt"
+      "acl": "tenant1_acl"
     }
   ],
   "globals": {
@@ -101,6 +99,7 @@
        "cert_file": "auto.hqhome163.com.crt",
        "key_file": "auto.hqhome163.com.key"
     },
+    "client_cert": "hqhome163.com.crt",
     "max_line_bytes": 65536,
     "max_rows": 200000,
     "max_seconds": 30,

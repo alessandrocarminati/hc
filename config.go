@@ -76,13 +76,13 @@ type Tenant struct {
 	TenantID        string `json:"tenantID"`
 	TenantName      string `json:"tenant_name"`
 	ACL             string `json:"acl"`
-	Cert            string `json:"cert"`
 }
 
 type Globals struct {
 	Identity        Identity `json:"identity"`
 	MaxLineBytes    int      `json:"max_line_bytes"`
 	MaxRows         int      `json:"max_rows"`
+	ClientCert	string   `json:"client_cert"`
 	DefaultTenantID string   `json:"default_tenant_id"`
 	MaxSeconds      int      `json:"max_seconds"`
 	Pepper          string   `json:"apikey_pepper"`
@@ -158,9 +158,6 @@ func (c Config) validate() error {
 		tenantIDs[t.TenantID] = struct{}{}
 		if t.ACL == "" {
 			return fmt.Errorf("tenants[%d].acl is required", i)
-		}
-		if t.Cert == "" {
-			return fmt.Errorf("tenants[%d].cert is required", i)
 		}
 	}
 	if len(c.Tenants) == 0 {

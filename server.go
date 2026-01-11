@@ -12,6 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 	"net/http"
+	"crypto/x509"
+	"crypto/tls"
 )
 
 var bufsiz int = 4 * 1048576
@@ -68,12 +70,28 @@ func serve(opts *Options) {
 
 		// HTTPS
 		if opts.Cfg.Server.HTTPS.Enabled {
+			var tlsConfig *tls.Config
+
 			muxHTTPS := http.NewServeMux()
 			RegisterExportHandlers(muxHTTPS, opts, ing.db)
+
+			debugPrint(log.Printf, levelDebug, "going to use %s to authenticate client certificates", opts.Cfg.Globals.ClientCert)
+			caCert, err := os.ReadFile(opts.Cfg.Globals.ClientCert)
+			if err == nil {
+				debugPrint(log.Printf, levelDebug, "using %s to authenticate client certificates", opts.Cfg.Globals.ClientCert)
+				caCertPool := x509.NewCertPool()
+				caCertPool.AppendCertsFromPEM(caCert)
+
+				tlsConfig = &tls.Config{
+					ClientCAs: caCertPool,
+					ClientAuth: tls.VerifyClientCertIfGiven,
+				}
+			}
 
 			httpsSrv := &http.Server{
 				Addr:    opts.Cfg.Server.HTTPS.Addr,
 				Handler: muxHTTPS,
+				TLSConfig: tlsConfig,
 			}
 
 			cert := strings.TrimSpace(opts.Cfg.Globals.Identity.CertFile)

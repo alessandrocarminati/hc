@@ -125,6 +125,35 @@ func (s *ExportService) getTenantFromHTTPAPI(msg *http.Request) string{
 	return tenantID
 }
 
+func (s *ExportService) getTenantFromHTTPSCert(r *http.Request) string {
+	if r == nil || r.TLS == nil {
+		return ""
+	}
+
+	if len(r.TLS.VerifiedChains) == 0 {
+		return ""
+	}
+
+	if len(r.TLS.PeerCertificates) == 0 {
+		return ""
+	}
+
+	cert := r.TLS.PeerCertificates[0]
+	cn := strings.TrimSpace(cert.Subject.CommonName)
+	if cn == "" {
+		return ""
+	}
+	debugPrint(log.Printf, levelDebug, "Authenticated as: %s", cert.Subject.CommonName)
+
+	tenantID, ok := s.DB.lookupTenantByUsername(cn)
+	if !ok {
+		return ""
+	}
+
+	debugPrint(log.Printf, levelDebug, "SUCCESS: authenticated, tenant resolved\n")
+	return tenantID
+}
+
 func (s *ExportService) getTenant(msg *http.Request) string{
 	debugPrint(log.Printf, levelCrazy, "Args: %v\n", msg)
 
@@ -154,6 +183,11 @@ func (s *ExportService) getTenant(msg *http.Request) string{
 				}
 			case AuthCert:
 				debugPrint(log.Printf, levelDebug, "Using AuthCert method\n")
+				t := s.getTenantFromHTTPSCert(msg)
+				if t != "" {
+					return t
+				}
+
 			default:
 				debugPrint(log.Printf, levelWarning, "Warning unsupported auth method in the list\n")
 		}

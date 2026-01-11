@@ -26,8 +26,14 @@ func RegisterExportHandlers(mux *http.ServeMux, opts *Options, db *DB) {
 	mux.HandleFunc("/export", s.handleExportUnsecure)
 
 	mux.HandleFunc("/web_app", func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "not implemented", http.StatusNotImplemented)
+		debugPrint(log.Printf, levelInfo, "Wip /web_app page reached!\n")
+		http.Error(w, "work in progress", http.StatusNotImplemented)
 	})
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		debugPrint(log.Printf, levelInfo, "not implemented or planned page reached!\n")
+                http.Error(w, "not implemented", http.StatusNotImplemented)
+        })
 }
 
 type exportQuery struct {

@@ -23,9 +23,9 @@ type ExportService struct {
 func RegisterExportHandlers(mux *http.ServeMux, opts *Options, db *DB) {
 	s := &ExportService{Opts: opts, DB: db}
 
-	mux.HandleFunc("/export_unsecure", s.handleExportUnsecure)
+	mux.HandleFunc("/export", s.handleExportUnsecure)
 
-	mux.HandleFunc("/export_ssl", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/web_app", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not implemented", http.StatusNotImplemented)
 	})
 }

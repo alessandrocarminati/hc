@@ -491,3 +491,23 @@ func nullTime(t *time.Time) sql.NullTime {
 		Valid: true,
 	}
 }
+
+func (db *DB) lookupTenantByUsername(username string) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var tenantID string
+
+	err := db.SQL.QueryRowContext(ctx, `
+		select tenant_id::text
+		from app_users
+		where username = $1
+		limit 1
+	`, username).Scan(&tenantID)
+
+	if err != nil {
+		return "", false
+	}
+
+	return strings.TrimSpace(tenantID), tenantID != ""
+}

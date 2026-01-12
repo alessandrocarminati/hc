@@ -1,18 +1,23 @@
 # HC: History Collector
+**The "Boring" Shell History Sink for Distributed Fleets.**
 
-`hc` is a lightweight command history collection service written in Go.
+`hc` is a lightweight service that centralizes shell history from across
+your infrastructure into a PostgreSQL backend. 
 
-It collects shell commands from remote systems over **plain TCP or TLS**,
-stores them in a **PostgreSQL database**, and allows **text-based export
-over HTTP/HTTPS** for grep-friendly usage.
+### Why hc?
+If you manage 50+ servers, your shell history is fragmented. Finding
+"that one command that worked" usually involves a dozen SSH sessions and
+a lot of grep. 
 
-The design goal is:
-
-* simple ingestion
-* append-only semantics
-* no client agents
-* grep-first workflows
-* multi-tenant ready
+`hc` solves this by providing a centralized, multi-tenant sink that is:
+* **Agentless:** Only requires `curl`, `wget`, or `socat` on the client.
+   No binaries to install on production nodes.
+* **SSL-Native:** Secure ingestion via TLS with support for Client 
+  Certificate and API Key authentication.
+* **Grep-Friendly:** Fetch your history as plaintext via `HTTPS` and 
+  pipe it directly into your local tools.
+* **Multi-tenant:** Isolate history by team or environment using API 
+  keys.
 
 ## Architecture Overview
 
@@ -250,8 +255,24 @@ insert into tenants values ('11111111-1111-1111-1111-111111111111', 'default');
 insert into app_users (id, tenant_id, username, created_at) values ('00000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'username', now());
 ```
 
-## Status (as for v0.3)
+## Handling Firewalls & NAT (The SSH Tunnel Method) Hack of the day
 
+Sometimes your target server is behind a restrictive firewall or a VPN and
+cannot "see" the hc collector directly.
+
+In the [example.bash](example.bash), there is a bootstrap script that:
+
+* Logs into the remote server via SSH.
+* Sets up a Reverse SSH Tunnel so the remote server can "talk back" to 
+  your collector through the established SSH connection.
+* Installs the `PROMPT_COMMAND` hook automatically.
+
+This allows you to collect history from servers that have zero inbound 
+or outbound access to the collector's network, as long as you can SSH into
+them from your workstation without leaving a single byte of configuration
+on the remote host.
+
+## Status (as for v0.3)
 
 * [OK] Plain + TLS ingestion
 * [OK] PostgreSQL storage

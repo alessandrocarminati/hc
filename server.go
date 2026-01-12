@@ -1,10 +1,7 @@
 package main
 
 import (
-	"io"
 	"os"
-	"net"
-	"time"
 	"fmt"
 	"strings"
 	"log"
@@ -123,46 +120,4 @@ func waitForShutdown(cancel context.CancelFunc) {
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	<-ch
 	cancel()
-}
-
-func receivedata(rd net.Conn, ch chan data) {
-
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", rd, ch)
-	defer 	debugPrint(log.Printf, levelCrazy, "dead\n")
-	debugPrint(log.Printf, levelCrazy, "alive\n")
-	b := make([]byte, bufsiz)
-
-	for {
-		_ = rd.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-
-		m, err := rd.Read(b)
-
-		if m == 0 || err == io.EOF {
-			break
-			}
-		debugPrint(log.Printf, levelCrazy, "sent 2 channel\n")
-		ch <- data{Str:b, Size:m, Keep: true}
-	}
-	debugPrint(log.Printf, levelCrazy, "Connection closed\n")
-	rd.Close()
-}
-
-func cwdata(h *History, ch chan data) {
-
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", h, ch)
-	keep:=true
-	defer 	debugPrint(log.Printf, levelCrazy, "dead\n")
-	debugPrint(log.Printf, levelCrazy, "alive\n")
-
-	for keep==true {
-		debugPrint(log.Printf, levelCrazy, "Look Checkpoint1\n")
-		b := <- ch
-		debugPrint(log.Printf, levelCrazy, "Look Checkpoint2\n")
-		cmd := string(b.Str[0:b.Size])
-		h.SaveLog(strings.TrimSuffix(cmd, "\n"))
-		h.ProcessCommand(strings.TrimSuffix(cmd, "\n"))
-		debugPrint(log.Printf, levelCrazy, "Look Checkpoint3\n")
-		keep=b.Keep;
-	}
-
 }

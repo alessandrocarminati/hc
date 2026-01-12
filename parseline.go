@@ -18,27 +18,6 @@ const (
 	noMatch
 )
 
-func (t regexpmatch) String() string {
-	switch t {
-	case reCompl:
-		return "reCompl"
-	case reSess:
-		return "reSess"
-	case reSessLoose:
-		return "reSessLoose"
-	case reNoSess:
-		return "reNoSess"
-	case reNoSessLoose:
-		return "reNoSessLoose"
-	case reTSOnly:
-		return "reTSOnly"
-	case noMatch:
-		return "noMatch"
-	default:
-		return "unknown"
-	}
-}
-
 var ingestRegexes = []struct {
 	kind regexpmatch
 	re   *regexp.Regexp

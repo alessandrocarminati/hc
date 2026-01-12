@@ -129,36 +129,6 @@ func ExtractAPIKeyTokenFromPayload(payload string) (token string, cleaned string
 	return "", payload, false
 }
 
-func StripAPIKeyFromIngestLine(line string) (cleanedLine string, hadKey bool) {
-	line = strings.TrimRight(line, "\r\n")
-	m := reIngestStrict.FindStringSubmatch(line)
-	if m == nil {
-		return line, false
-	}
-
-	idxs := reIngestStrict.FindStringSubmatchIndex(line)
-	if idxs == nil {
-		return line, false
-	}
-	payloadIdx := reIngestStrict.SubexpIndex("payload")
-	if payloadIdx <= 0 {
-		return line, false
-	}
-	start := idxs[2*payloadIdx]
-	end := idxs[2*payloadIdx+1]
-	if start < 0 || end < 0 || start > end || end > len(line) {
-		return line, false
-	}
-
-	payload := line[start:end]
-	_, cleanedPayload, ok := ExtractAPIKeyTokenFromPayload(payload)
-	if !ok {
-		return line, false
-	}
-
-	return line[:start] + cleanedPayload, true
-}
-
 func splitKeyToken(tok string) (keyID, secret string, ok bool) {
 	i := strings.IndexByte(tok, '.')
 	if i <= 0 || i == len(tok)-1 {

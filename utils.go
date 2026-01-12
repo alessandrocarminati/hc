@@ -59,12 +59,3 @@ func ResolveOptions(cfg Config, cl CommandLine, verstr string) (*Options, error)
 	return &o, nil
 }
 
-func ValidateServer(s ListenerConfig) bool {
-	debugPrint(log.Printf, levelCrazy, "Args=%v\n", s)
-
-	if s.Enabled && s.Addr == "" {
-		return false
-	}
-	return true
-}
-

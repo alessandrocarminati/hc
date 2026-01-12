@@ -99,35 +99,3 @@ func connDataFromRequest(r *http.Request) connData {
 
 	return cd
 }
-
-
-func authRequireTLS(c connData) authRes {
-	if c.IsTLS {
-		return AuthAllow
-	}
-	return AuthDeny
-}
-
-func authRequireClientCert(c connData) authRes {
-	if !c.IsTLS || c.TLS == nil {
-		return AuthDeny
-	}
-	if len(c.TLS.PeerCertificates) == 0 {
-		return AuthDeny
-	}
-	return AuthAllow
-}
-
-func authAllowCIDRs(cidrs []cidrRule) authFn {
-	return func(c connData) authRes {
-		if !c.SrcAddr.IsValid() {
-			return AuthNoMatch
-		}
-		for _, r := range cidrs {
-			if r.Net.Contains(c.SrcAddr) {
-				return AuthAllow
-			}
-		}
-		return AuthNoMatch
-	}
-}

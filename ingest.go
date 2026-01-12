@@ -751,21 +751,6 @@ func (s *IngestService) acceptLoop(ln net.Listener, tr Transport) {
 	}
 }
 
-func (s *IngestService) isRawPeerAllowed(ip netip.Addr, tenantID string) bool {
-	debugPrint(log.Printf, levelCrazy, "Args=%v\n", ip)
-
-	acl, ok := s.cfg.RawCIDRRules[tenantID]
-	if !ok {
-		return false
-	}
-	for _, r := range acl {
-		if r.Prefix.Contains(ip) {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *IngestService) readConnLines(r io.Reader, peerIP netip.Addr, tr Transport) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v,%v, %d\n", r, peerIP, tr)
 	max := s.cfg.MaxLineBytes
@@ -888,13 +873,6 @@ func readAllLimit(r io.Reader, limit int) ([]byte, bool, error) {
 
 func minInt(a, b int) int {
 	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt64(a, b int) int {
-	if a > b {
 		return a
 	}
 	return b

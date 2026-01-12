@@ -71,11 +71,11 @@ func CreateAPIKey(opts *Options) error {
 
 	debugPrint(log.Printf, levelDebug, "insert into db\n")
 	id := uuid.New()
-	if err := insertAPIKey(ctx, db.SQL, id, opts.AKTenantID, &opts.AKUserID, keyID, keyHash); err != nil {
+	if err := db.insertAPIKey(ctx, id, opts.AKTenantID, &opts.AKUserID, keyID, keyHash); err != nil {
 		if isUniqueViolation(err) {
 			for i := 0; i < 3; i++ {
 				keyID, _ = generateKeyID()
-				if err2 := insertAPIKey(ctx, db.SQL, id, opts.AKTenantID, &opts.AKUserID, keyID, keyHash); err2 == nil {
+				if err2 := db.insertAPIKey(ctx, id, opts.AKTenantID, &opts.AKUserID, keyID, keyHash); err2 == nil {
 					goto PRINT
 				} else if !isUniqueViolation(err2) {
 					return err2
@@ -96,15 +96,6 @@ PRINT:
 	fmt.Printf("api_key:   %s\n", apiKey)
 	fmt.Println("note: api_key is shown only now; store it safely.")
 	return nil
-}
-
-func insertAPIKey(ctx context.Context, db *sql.DB, id uuid.UUID, tenant uuid.UUID, user *uuid.UUID, keyID, keyHash string) error {
-	debugPrint(log.Printf, levelDebug, "insert into api_keys values ('%s', '%s', '%s', '%s', '%s', %s));\n", id.String(), tenant.String(), user.String(), keyID, keyHash, "1234")
-	_, err := db.ExecContext(ctx, `
-		insert into api_keys (id, tenant_id, user_id, key_id, key_hash)
-		values ($1,$2,$3,$4,$5)
-	`, id, tenant, user, keyID, keyHash)
-	return err
 }
 
 func ensureTenantExists(ctx context.Context, db *sql.DB, tenant uuid.UUID) error {

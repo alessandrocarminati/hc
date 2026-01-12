@@ -511,3 +511,12 @@ func (db *DB) lookupTenantByUsername(username string) (string, bool) {
 
 	return strings.TrimSpace(tenantID), tenantID != ""
 }
+
+func (db *DB) insertAPIKey(ctx context.Context, id uuid.UUID, tenant uuid.UUID, user *uuid.UUID, keyID, keyHash string) error {
+	debugPrint(log.Printf, levelDebug, "insert into api_keys values ('%s', '%s', '%s', '%s', '%s', %s));\n", id.String(), tenant.String(), user.String(), keyID, keyHash, "1234")
+	_, err := db.SQL.ExecContext(ctx, `
+		insert into api_keys (id, tenant_id, user_id, key_id, key_hash)
+		values ($1,$2,$3,$4,$5)
+	`, id, tenant, user, keyID, keyHash)
+	return err
+}

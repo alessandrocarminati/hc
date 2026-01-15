@@ -1,0 +1,72 @@
+{
+  "server": {
+    "ingest_clear": {
+      "enabled": true,
+      "addr": "0.0.0.0:${iport_clear}",
+      "auth": [
+        "none"
+      ],
+      "tenants": [
+        "${default_tenant_uuid}",
+      ]
+    },
+    "ingest_tls": {
+      "enabled": true,
+      "addr": "0.0.0.0:${iport_ssl}",
+      "auth": [
+        "none"
+      ]
+    },
+    "http": {
+      "enabled": true,
+      "addr": "0.0.0.0:${sport_http}",
+      "auth": [
+        "none"
+      ]
+    },
+    "https": {
+      "enabled": true,
+      "addr": "0.0.0.0:${sport_https}",
+      "auth": [
+        "none"
+      ],
+      "tenants": [
+        "${default_tenant_uuid}",
+      ]
+    }
+  },
+  "db": {
+    "postgres_dsn": "host=${db_host} port=${db_port} user=${db_user} password=${db_password} dbname=history sslmode=${db_ssl_mode}"
+  },
+  "acl": [
+    {
+      "id": "tenant_main_acl",
+      "rules": [
+        {
+          "CIDR": "0.0.0.0/0",
+          "action": "allow",
+          "name": "default"
+        }
+      ]
+    }
+  ],
+  "tenants": [
+    {
+      "tenantID": "${default_tenant_uuid}",
+      "tenant_name": "Main",
+      "acl": "tenant_main_acl"
+    }
+  ],
+  "globals": {
+    "identity": {
+       "cert_file": "${host_certificate}",
+       "key_file": "${host_key}"
+    },
+    "client_cert": "${ca_certificate}",
+    "max_line_bytes": 65536,
+    "max_rows": 200000,
+    "max_seconds": 30,
+    "default_tenant_id": "${default_tenant_uuid}",
+    "apikey_pepper": "${random_string}"
+  }
+}

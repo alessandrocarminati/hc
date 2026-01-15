@@ -764,6 +764,7 @@ func (s *IngestService) readConnLines(r io.Reader, peerIP netip.Addr, tr Transpo
 		atomic.AddUint64(&s.linesDropped, 1)
 		return
 	}
+	debugPrint(log.Printf, levelCrazy, "Received Line = \"%s\"\n", string(data))
 	if tooBig {
 		debugPrint(log.Printf, levelDebug, "Line dropped due to size: too long\n")
 		atomic.AddUint64(&s.linesDropped, 1)

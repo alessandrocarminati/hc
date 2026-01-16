@@ -1,0 +1,27 @@
+services:
+  db:
+    image: hc-postgres:dev
+    environment:
+      POSTGRES_USER: hc
+      POSTGRES_PASSWORD: hc
+      POSTGRES_DB: history
+    volumes:
+      - ./hc/pgdata:/var/lib/postgresql/data:Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hc -d history"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  hc:
+    image: hc:dev
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./certs:/certs/:ro,Z
+    ports:
+      - "1234:1234"
+      - "1235:1235"
+      - "8080:8080"
+      - "8443:8443"

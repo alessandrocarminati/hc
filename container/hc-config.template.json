@@ -5,9 +5,6 @@
       "addr": "0.0.0.0:${iport_clear}",
       "auth": [
         "none"
-      ],
-      "tenants": [
-        "${default_tenant_uuid}"
       ]
     },
     "ingest_tls": {

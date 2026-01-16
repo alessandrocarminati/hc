@@ -1,0 +1,8 @@
+ca.crt:
+hqhome163.com.crt
+
+host.crt:
+auto.hqhome163.com.crt
+
+host.key:
+auto.hqhome163.com.key

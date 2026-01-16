@@ -7,7 +7,7 @@
         "none"
       ],
       "tenants": [
-        "${default_tenant_uuid}",
+        "${default_tenant_uuid}"
       ]
     },
     "ingest_tls": {
@@ -31,7 +31,7 @@
         "none"
       ],
       "tenants": [
-        "${default_tenant_uuid}",
+        "${default_tenant_uuid}"
       ]
     }
   },

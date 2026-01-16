@@ -30,14 +30,12 @@ type ListenerConfig struct {
 	Enabled bool       `json:"enabled"`
 	Addr    string     `json:"addr"`
 	Auth    []AuthMode `json:"auth"`
-	Tenants []string   `json:"tenants"`
 }
 
 type HTTPConfig struct {
 	Enabled bool       `json:"enabled"`
 	Addr    string     `json:"addr"`
 	Auth    []AuthMode `json:"auth"`
-	Tenants []string   `json:"tenants"`
 }
 
 type AuthMode string
@@ -92,6 +90,19 @@ type Identity struct {
 	CertFile string `json:"cert_file"`
 	KeyFile  string `json:"key_file"`
 }
+
+type CommonConfig interface {
+    GetEnabled() bool
+    GetAddr() string
+    GetAuth() []AuthMode
+}
+func (l ListenerConfig) GetEnabled() bool    { return l.Enabled }
+func (l ListenerConfig) GetAddr() string     { return l.Addr }
+func (l ListenerConfig) GetAuth() []AuthMode { return l.Auth }
+
+func (l HTTPConfig) GetEnabled() bool    { return l.Enabled }
+func (l HTTPConfig) GetAddr() string     { return l.Addr }
+func (l HTTPConfig) GetAuth() []AuthMode { return l.Auth }
 
 func ReadConfig(cl CommandLine) (Config, error) {
 	path := cl.ConfigPath
@@ -217,54 +228,31 @@ func (c Config) validate() error {
 }
 
 func validateListener(name string, l ListenerConfig, tenantIDs map[string]struct{}) error {
-	if !l.Enabled {
-		return nil
-	}
-	if strings.TrimSpace(l.Addr) == "" {
-		return fmt.Errorf("%s.addr is required when enabled", name)
-	}
-	if len(l.Tenants) == 0 {
-		return fmt.Errorf("%s.tenants must not be empty when enabled", name)
-	}
-	for i, id := range l.Tenants {
-		if !isValidUUID(id) {
-			return fmt.Errorf("%s.tenants[%d] is not a valid UUID: %q", name, i, id)
-		}
-		if _, ok := tenantIDs[id]; !ok {
-			return fmt.Errorf("%s.tenants[%d] references unknown tenantID %q", name, i, id)
-		}
-	}
-	return nil
+	return validateServerCommon(name, l, tenantIDs)
 }
 
-func validateHTTP(name string, h HTTPConfig, tenantIDs map[string]struct{}) error {
-	if !h.Enabled {
+func validateHTTP(name string, l HTTPConfig, tenantIDs map[string]struct{}) error {
+	return validateServerCommon(name, l, tenantIDs)
+}
+
+func validateServerCommon(name string, l CommonConfig, tenantIDs map[string]struct{}) error {
+	if !l.GetEnabled() {
 		return nil
 	}
-	if strings.TrimSpace(h.Addr) == "" {
+	if strings.TrimSpace(l.GetAddr()) == "" {
 		return fmt.Errorf("%s.addr is required when enabled", name)
-	}
-	if len(h.Tenants) == 0 {
-		return fmt.Errorf("%s.tenants must not be empty when enabled", name)
-	}
-	for i, id := range h.Tenants {
-		if !isValidUUID(id) {
-			return fmt.Errorf("%s.tenants[%d] is not a valid UUID: %q", name, i, id)
-		}
-		if _, ok := tenantIDs[id]; !ok {
-			return fmt.Errorf("%s.tenants[%d] references unknown tenantID %q", name, i, id)
-		}
 	}
 
 	// auth list
-	if len(h.Auth) == 0 {
+	if len(l.GetAuth()) == 0 {
 		return fmt.Errorf("%s.auth must not be empty when enabled", name)
 	}
-	for i, a := range h.Auth {
+	for i, a := range l.GetAuth() {
 		if !a.Valid() {
 			return fmt.Errorf("%s.auth[%d] invalid: %q (allowed: none|cert|apikey)", name, i, a)
 		}
 	}
+
 	return nil
 }
 

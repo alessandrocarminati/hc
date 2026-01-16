@@ -19,6 +19,8 @@ a lot of grep.
 * **Multi-tenant:** Isolate history by team or environment using API 
   keys.
 
+More on this story on this [article](https://carminatialessandro.blogspot.com/2026/01/hc-agentless-multi-tenant-shell-history.html) from my blog.
+
 ## Architecture Overview
 
 ```

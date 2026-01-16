@@ -29,9 +29,6 @@
       "addr": "0.0.0.0:${sport_https}",
       "auth": [
         "none"
-      ],
-      "tenants": [
-        "${default_tenant_uuid}"
       ]
     }
   },

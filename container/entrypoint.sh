@@ -32,4 +32,4 @@ export iport_clear iport_ssl sport_http sport_https \
 envsubst < /config/hc-config.template.json > /config/hc-config.json
 
 echo "HC using DB: ${db_user}@${db_host}:${db_port} sslmode=${db_ssl_mode}"
-exec /usr/local/bin/hc serve --config /config/hc-config.json
+exec /usr/local/bin/hc serve --config /config/hc-config.json -loglevel info

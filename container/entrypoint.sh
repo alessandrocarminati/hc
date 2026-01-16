@@ -23,7 +23,12 @@ set -eu
 : "${host_certificate:=/certs/host.crt}"
 : "${host_key:=/certs/host.key}"
 
-mkdir -p /config
+
+export iport_clear iport_ssl sport_http sport_https \
+       db_host db_port db_user db_password db_ssl_mode \
+       default_tenant_uuid random_string \
+       ca_certificate host_certificate host_key
+
 envsubst < /config/hc-config.template.json > /config/hc-config.json
 
 echo "HC using DB: ${db_user}@${db_host}:${db_port} sslmode=${db_ssl_mode}"

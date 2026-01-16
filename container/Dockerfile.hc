@@ -19,6 +19,8 @@ WORKDIR /app
 
 RUN apk add --no-cache gettext
 
+RUN mkdir -p /certs
+
 COPY --from=build /out/hc /usr/local/bin/hc
 
 COPY --from=build /src/container/hc-config.template.json /config/hc-config.template.json

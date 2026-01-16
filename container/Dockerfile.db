@@ -1,0 +1,13 @@
+FROM postgres:16
+
+ARG HC_REF=master
+
+COPY pg_schema.sql /docker-entrypoint-initdb.d/001-pg_schema.sql
+
+RUN set -eux; \
+  cat > /docker-entrypoint-initdb.d/002-bootstrap.sql <<'SQL'
+insert into tenants values ('9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a', 'default');
+insert into app_users (id, tenant_id, username, created_at) values ('00000000-0000-0000-0000-000000000002', '9b9b1a6e-3d3e-4b2a-8f2c-3a51b84e4a0a', 'lillo', now());
+SQL
+
+RUN chmod 0644 /docker-entrypoint-initdb.d/*.sql

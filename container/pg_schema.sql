@@ -35,7 +35,7 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: api_keys; Type: TABLE; Schema: public; Owner: postgres
+-- Name: api_keys; Type: TABLE; Schema: public; Owner: hc
 --
 
 CREATE TABLE public.api_keys (
@@ -49,10 +49,10 @@ CREATE TABLE public.api_keys (
 );
 
 
-ALTER TABLE public.api_keys OWNER TO postgres;
+ALTER TABLE public.api_keys OWNER TO hc;
 
 --
--- Name: app_users; Type: TABLE; Schema: public; Owner: postgres
+-- Name: app_users; Type: TABLE; Schema: public; Owner: hc
 --
 
 CREATE TABLE public.app_users (
@@ -63,10 +63,10 @@ CREATE TABLE public.app_users (
 );
 
 
-ALTER TABLE public.app_users OWNER TO postgres;
+ALTER TABLE public.app_users OWNER TO hc;
 
 --
--- Name: cmd_event_tags; Type: TABLE; Schema: public; Owner: postgres
+-- Name: cmd_event_tags; Type: TABLE; Schema: public; Owner: hc
 --
 
 CREATE TABLE public.cmd_event_tags (
@@ -76,10 +76,10 @@ CREATE TABLE public.cmd_event_tags (
 );
 
 
-ALTER TABLE public.cmd_event_tags OWNER TO postgres;
+ALTER TABLE public.cmd_event_tags OWNER TO hc;
 
 --
--- Name: cmd_events; Type: TABLE; Schema: public; Owner: postgres
+-- Name: cmd_events; Type: TABLE; Schema: public; Owner: hc
 --
 
 CREATE TABLE public.cmd_events (
@@ -99,10 +99,10 @@ CREATE TABLE public.cmd_events (
 );
 
 
-ALTER TABLE public.cmd_events OWNER TO postgres;
+ALTER TABLE public.cmd_events OWNER TO hc;
 
 --
--- Name: cmd_events_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: cmd_events_id_seq; Type: SEQUENCE; Schema: public; Owner: hc
 --
 
 ALTER TABLE public.cmd_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
@@ -116,7 +116,7 @@ ALTER TABLE public.cmd_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
--- Name: tenants; Type: TABLE; Schema: public; Owner: postgres
+-- Name: tenants; Type: TABLE; Schema: public; Owner: hc
 --
 
 CREATE TABLE public.tenants (
@@ -126,10 +126,10 @@ CREATE TABLE public.tenants (
 );
 
 
-ALTER TABLE public.tenants OWNER TO postgres;
+ALTER TABLE public.tenants OWNER TO hc;
 
 --
--- Name: api_keys api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: api_keys api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.api_keys
@@ -137,7 +137,7 @@ ALTER TABLE ONLY public.api_keys
 
 
 --
--- Name: api_keys api_keys_tenant_id_key_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: api_keys api_keys_tenant_id_key_id_key; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.api_keys
@@ -145,7 +145,7 @@ ALTER TABLE ONLY public.api_keys
 
 
 --
--- Name: app_users app_users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: app_users app_users_pkey; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.app_users
@@ -153,7 +153,7 @@ ALTER TABLE ONLY public.app_users
 
 
 --
--- Name: app_users app_users_tenant_id_username_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: app_users app_users_tenant_id_username_key; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.app_users
@@ -161,7 +161,7 @@ ALTER TABLE ONLY public.app_users
 
 
 --
--- Name: cmd_event_tags cmd_event_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: cmd_event_tags cmd_event_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.cmd_event_tags
@@ -169,7 +169,7 @@ ALTER TABLE ONLY public.cmd_event_tags
 
 
 --
--- Name: cmd_events cmd_events_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: cmd_events cmd_events_pkey; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.cmd_events
@@ -177,7 +177,7 @@ ALTER TABLE ONLY public.cmd_events
 
 
 --
--- Name: cmd_events cmd_events_tenant_id_seq_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: cmd_events cmd_events_tenant_id_seq_key; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.cmd_events
@@ -185,7 +185,7 @@ ALTER TABLE ONLY public.cmd_events
 
 
 --
--- Name: tenants tenants_id_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: tenants tenants_id_unique; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.tenants
@@ -193,7 +193,7 @@ ALTER TABLE ONLY public.tenants
 
 
 --
--- Name: tenants tenants_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: tenants tenants_name_key; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.tenants
@@ -201,7 +201,7 @@ ALTER TABLE ONLY public.tenants
 
 
 --
--- Name: tenants tenants_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: tenants tenants_pkey; Type: CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.tenants
@@ -209,28 +209,28 @@ ALTER TABLE ONLY public.tenants
 
 
 --
--- Name: cmd_events_cmd_trgm; Type: INDEX; Schema: public; Owner: postgres
+-- Name: cmd_events_cmd_trgm; Type: INDEX; Schema: public; Owner: hc
 --
 
 CREATE INDEX cmd_events_cmd_trgm ON public.cmd_events USING gin (cmd public.gin_trgm_ops);
 
 
 --
--- Name: cmd_events_raw_trgm; Type: INDEX; Schema: public; Owner: postgres
+-- Name: cmd_events_raw_trgm; Type: INDEX; Schema: public; Owner: hc
 --
 
 CREATE INDEX cmd_events_raw_trgm ON public.cmd_events USING gin (raw_line public.gin_trgm_ops);
 
 
 --
--- Name: cmd_events_tenant_id_id_desc; Type: INDEX; Schema: public; Owner: postgres
+-- Name: cmd_events_tenant_id_id_desc; Type: INDEX; Schema: public; Owner: hc
 --
 
 CREATE INDEX cmd_events_tenant_id_id_desc ON public.cmd_events USING btree (tenant_id, id DESC);
 
 
 --
--- Name: api_keys api_keys_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: api_keys api_keys_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.api_keys
@@ -238,7 +238,7 @@ ALTER TABLE ONLY public.api_keys
 
 
 --
--- Name: api_keys api_keys_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: api_keys api_keys_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.api_keys
@@ -246,7 +246,7 @@ ALTER TABLE ONLY public.api_keys
 
 
 --
--- Name: app_users app_users_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: app_users app_users_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.app_users
@@ -254,7 +254,7 @@ ALTER TABLE ONLY public.app_users
 
 
 --
--- Name: cmd_event_tags cmd_event_tags_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: cmd_event_tags cmd_event_tags_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.cmd_event_tags
@@ -262,7 +262,7 @@ ALTER TABLE ONLY public.cmd_event_tags
 
 
 --
--- Name: cmd_event_tags cmd_event_tags_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: cmd_event_tags cmd_event_tags_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.cmd_event_tags
@@ -270,7 +270,7 @@ ALTER TABLE ONLY public.cmd_event_tags
 
 
 --
--- Name: cmd_events cmd_events_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: cmd_events cmd_events_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hc
 --
 
 ALTER TABLE ONLY public.cmd_events

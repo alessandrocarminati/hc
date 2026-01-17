@@ -13,3 +13,9 @@ hc-$(MAJOR).$(MINOR): $(SOURCES)
 
 clean:
 	rm -rf  hc-*
+
+check:
+	gofmt -w *.go
+	go vet ./...
+
+

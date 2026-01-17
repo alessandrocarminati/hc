@@ -1,25 +1,24 @@
 package main
 
 import (
-	"os"
-	"fmt"
-	"strings"
-	"log"
 	"context"
-	"os/signal"
-	"syscall"
-	"net/http"
-	"crypto/x509"
 	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 )
 
 var bufsiz int = 4 * 1048576
 
-
 type data struct {
-	Str []byte
+	Str  []byte
 	Size int
-	Keep  bool
+	Keep bool
 }
 
 func doRunServe(version string, args []string) {
@@ -45,7 +44,6 @@ func serve(opts *Options) {
 		log.Fatalf("failed to start ingestion: %v", err)
 	}
 	defer ing.Stop()
-
 
 	if ing.db != nil {
 		// HTTP
@@ -80,14 +78,14 @@ func serve(opts *Options) {
 				caCertPool.AppendCertsFromPEM(caCert)
 
 				tlsConfig = &tls.Config{
-					ClientCAs: caCertPool,
+					ClientCAs:  caCertPool,
 					ClientAuth: tls.VerifyClientCertIfGiven,
 				}
 			}
 
 			httpsSrv := &http.Server{
-				Addr:    opts.Cfg.Server.HTTPS.Addr,
-				Handler: muxHTTPS,
+				Addr:      opts.Cfg.Server.HTTPS.Addr,
+				Handler:   muxHTTPS,
 				TLSConfig: tlsConfig,
 			}
 
@@ -107,7 +105,7 @@ func serve(opts *Options) {
 		}
 
 	} else {
-		 debugPrint(log.Printf, levelWarning, "DB not available. only ingestion service\n")
+		debugPrint(log.Printf, levelWarning, "DB not available. only ingestion service\n")
 	}
 
 	waitForShutdown(cancel)

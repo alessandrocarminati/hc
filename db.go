@@ -5,15 +5,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"unicode/utf8"
-	"os"
+	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
-	"log"
-	_ "github.com/lib/pq"
-	"github.com/google/uuid"
+	"unicode/utf8"
 )
 
 type DB struct {
@@ -207,7 +207,7 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 	}
 
 	for sc.Scan() {
-		seq = seq +1
+		seq = seq + 1
 		line := strings.TrimRight(sc.Text(), "\r\n")
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -361,7 +361,7 @@ func (d *DB) StreamExport(ctx context.Context, w io.Writer, flusher http.Flusher
 }
 
 func formatExportLine(tsClient sql.NullTime, tsIngested time.Time, sessionID sql.NullString, host sql.NullString, cwd sql.NullString, cmd sql.NullString, raw string) string {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %v, %v, %v, %v, %s, %s\n", tsClient, tsIngested, sessionID, host, cwd, cmd, raw, )
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %v, %v, %v, %v, %s, %s\n", tsClient, tsIngested, sessionID, host, cwd, cmd, raw)
 	t := tsIngested
 	if tsClient.Valid {
 		t = tsClient.Time
@@ -418,7 +418,7 @@ func sanitizeForOneLine(s string) string {
 
 func (db *DB) MaxSeq(ctx context.Context, tenantID string) (int64, error) {
 	var seq sql.NullInt64
-	debugPrint(log.Printf, levelDebug, "Args: %v, %s\n", ctx, tenantID )
+	debugPrint(log.Printf, levelDebug, "Args: %v, %s\n", ctx, tenantID)
 
 	err := db.SQL.QueryRowContext(ctx, `
 		select max(seq) from cmd_events where tenant_id = $1

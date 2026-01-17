@@ -6,10 +6,10 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
+	"log"
 	"regexp"
 	"strings"
 	"time"
-	"log"
 )
 
 var reAPIKeyID = regexp.MustCompile(`^hc_[0-9a-f]{8}$`)

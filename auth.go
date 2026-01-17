@@ -22,12 +22,12 @@ type cidrRule struct {
 
 type connData struct {
 	// Network / transport
-	SrcAddr     netip.Addr
-	SrcPort     uint16
-	DstAddr     netip.Addr
-	DstPort     uint16
-	IsTLS       bool
-	ServerName  string
+	SrcAddr    netip.Addr
+	SrcPort    uint16
+	DstAddr    netip.Addr
+	DstPort    uint16
+	IsTLS      bool
+	ServerName string
 
 	// HTTP
 	Method  string

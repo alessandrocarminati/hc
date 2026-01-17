@@ -6,18 +6,17 @@ import (
 )
 
 var (
-	Build string
+	Build   string
 	Version string
-	Hash string
-	Dirty string
+	Hash    string
+	Dirty   string
 )
 
 type Command struct {
-	Name            string
-	Handler         func(string, []string)
-	Description     string
+	Name        string
+	Handler     func(string, []string)
+	Description string
 }
-
 
 var commands = []Command{
 	{
@@ -78,4 +77,3 @@ func main() {
 		fmt.Println("unknown command")
 	}
 }
-

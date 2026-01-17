@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"net"
-	"io"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,8 +32,8 @@ func RegisterExportHandlers(mux *http.ServeMux, opts *Options, db *DB) {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		debugPrint(log.Printf, levelInfo, "not implemented or planned page reached!\n")
-                http.Error(w, "not implemented", http.StatusNotImplemented)
-        })
+		http.Error(w, "not implemented", http.StatusNotImplemented)
+	})
 }
 
 type exportQuery struct {
@@ -73,7 +73,7 @@ func parseBearerAPIKey(v string) (keyID, secret string) {
 	return tok[:i], tok[i+1:]
 }
 
-func (s *ExportService) getTenantFromHTTPAPI(msg *http.Request) string{
+func (s *ExportService) getTenantFromHTTPAPI(msg *http.Request) string {
 	debugPrint(log.Printf, levelCrazy, "ARG=%v\n", *msg)
 
 	debugPrint(log.Printf, levelDebug, "Extract Authorization header\n")
@@ -154,7 +154,7 @@ func (s *ExportService) getTenantFromHTTPSCert(r *http.Request) string {
 	return tenantID
 }
 
-func (s *ExportService) getTenant(msg *http.Request) string{
+func (s *ExportService) getTenant(msg *http.Request) string {
 	debugPrint(log.Printf, levelCrazy, "Args: %v\n", msg)
 
 	authMethods := s.Opts.Cfg.Server.HTTP.Auth
@@ -166,30 +166,30 @@ func (s *ExportService) getTenant(msg *http.Request) string{
 	debugPrint(log.Printf, levelDebug, "Itearate over defined methods %v: TLS=%t\n", authMethods, TLSFlag)
 	for _, method := range authMethods {
 		switch AuthMode(strings.ToLower(string(method))) {
-			case AuthNone:
-				debugPrint(log.Printf, levelInfo, "Using default tenant\n")
-				t := strings.TrimSpace(s.Opts.Cfg.Globals.DefaultTenantID)
-				if t != "" {
-					return t
-				}
-			case AuthAPIKey:
-				debugPrint(log.Printf, levelDebug, "Using AuthAPIKey method\n")
-				if !TLSFlag {
-					 debugPrint(log.Printf, levelWarning, "== WARNING == use of APIKEY in cleartex request!\n")
-				}
-				t := s.getTenantFromHTTPAPI(msg)
-				if t != "" {
-					return t
-				}
-			case AuthCert:
-				debugPrint(log.Printf, levelDebug, "Using AuthCert method\n")
-				t := s.getTenantFromHTTPSCert(msg)
-				if t != "" {
-					return t
-				}
+		case AuthNone:
+			debugPrint(log.Printf, levelInfo, "Using default tenant\n")
+			t := strings.TrimSpace(s.Opts.Cfg.Globals.DefaultTenantID)
+			if t != "" {
+				return t
+			}
+		case AuthAPIKey:
+			debugPrint(log.Printf, levelDebug, "Using AuthAPIKey method\n")
+			if !TLSFlag {
+				debugPrint(log.Printf, levelWarning, "== WARNING == use of APIKEY in cleartex request!\n")
+			}
+			t := s.getTenantFromHTTPAPI(msg)
+			if t != "" {
+				return t
+			}
+		case AuthCert:
+			debugPrint(log.Printf, levelDebug, "Using AuthCert method\n")
+			t := s.getTenantFromHTTPSCert(msg)
+			if t != "" {
+				return t
+			}
 
-			default:
-				debugPrint(log.Printf, levelWarning, "Warning unsupported auth method in the list\n")
+		default:
+			debugPrint(log.Printf, levelWarning, "Warning unsupported auth method in the list\n")
 		}
 	}
 	return ""

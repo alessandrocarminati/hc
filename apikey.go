@@ -8,9 +8,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"os"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -18,30 +18,27 @@ import (
 )
 
 func doRunAPIKeyCreate(version string, args []string) {
-        opts, err := getRuntimeConf(version, args)
-        if err != nil {
-                fmt.Printf("%v\n", err)
-                os.Exit(1)
-        }
-
-        debugPrint(log.Printf, levelDebug, "Api key creating\n")
-
-        err = CreateAPIKey(opts)
+	opts, err := getRuntimeConf(version, args)
 	if err != nil {
-		 debugPrint(log.Printf, levelError, "Error: %v\n", err)
+		fmt.Printf("%v\n", err)
+		os.Exit(1)
+	}
+
+	debugPrint(log.Printf, levelDebug, "Api key creating\n")
+
+	err = CreateAPIKey(opts)
+	if err != nil {
+		debugPrint(log.Printf, levelError, "Error: %v\n", err)
 	}
 }
-
 
 func CreateAPIKey(opts *Options) error {
 	debugPrint(log.Printf, levelCrazy, "opts=%v\n", opts)
 
-
-
 	ctx := context.Background()
 
 	debugPrint(log.Printf, levelDebug, "connect db\n")
-        db, err := OpenDB(ctx, opts.Cfg.DB.PostgresDSN)
+	db, err := OpenDB(ctx, opts.Cfg.DB.PostgresDSN)
 
 	if err != nil {
 		return err

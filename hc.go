@@ -6,18 +6,17 @@ import (
 )
 
 var (
-	Build string
+	Build   string
 	Version string
-	Hash string
-	Dirty string
+	Hash    string
+	Dirty   string
 )
 
 type Command struct {
-	Name            string
-	Handler         func(string, []string)
-	Description     string
+	Name        string
+	Handler     func(string, []string)
+	Description string
 }
-
 
 var commands = []Command{
 	{
@@ -61,7 +60,7 @@ func doExport(version string, args []string) {
 func doGenAsym(version string, args []string) {
 	privB64, pubB64, err := genAsymKey()
 	if err != nil {
-		fmt.Println("error generating keys: %v\n", err)
+		fmt.Printf("error generating keys: %s\n", err.Error())
 		os.Exit(1)
 	}
 	fmt.Println("PRIVATE (base64):", privB64)
@@ -93,4 +92,3 @@ func main() {
 		fmt.Println("unknown command")
 	}
 }
-

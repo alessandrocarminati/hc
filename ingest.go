@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -35,7 +36,7 @@ func (t Transport) String() string {
 	}
 }
 
-type authFunc func(msg *RawMsg) string
+type authFunc func(msg *RawMsg) *Tenant
 
 type IngestParsed struct {
 	TsStr    string
@@ -48,42 +49,40 @@ type IngestParsed struct {
 
 
 type CIDRTenantRule struct {
-	Prefix   netip.Prefix
-	TenantID string
-	Action   bool
-	Name     string
+	Prefix    netip.Prefix
+	TenantPTR *Tenant
+	Action    bool
+	Name      string
 }
 
 type IngestConfig struct {
 	// listeners
-	RawEnabled	bool
-	RawAddr		string
+	RawEnabled	 bool
+	RawAddr		 string
 
-	TLSEnabled	bool
-	TLSAddr		string
-	TLSConfig	*tls.Config
+	TLSEnabled	 bool
+	TLSAddr		 string
+	TLSConfig	 *tls.Config
 
 	// worker counts / queues
-	ValidateWorkers int
-	DBWorkers       int
-	QueueDepth      int
+	ValidateWorkers  int
+	DBWorkers        int
+	QueueDepth       int
 
-	MaxLineBytes	int
+	MaxLineBytes	 int
 
 	// tenancy
-	DefaultTenantID string
-	RawCIDRRules    map[string][]CIDRTenantRule
-	AuthLst		map[Transport][]AuthMode
-	Pepper		string
+	AppCfg           *Config
+	RawCIDRRules     map[string][]CIDRTenantRule
+	AuthLst		 map[Transport][]AuthMode
 
 	// spooling
-	SpoolDir	string
-	SpoolSyncEveryN	int
-	SpoolSyncEvery	time.Duration
+	SpoolDir	 string
+	SpoolSyncEveryN	 int
+	SpoolSyncEvery	 time.Duration
 
 	// db
-	PostgresDSN	string
-	DBRequired	bool
+	DBRequired	 bool
 }
 
 type IngestService struct {
@@ -122,7 +121,7 @@ type RawMsg struct {
 
 type ValidatedMsg struct {
 	Line      string
-	TenantID  string
+	TenantPTR *Tenant
 	PeerIP    netip.Addr
 	Received  time.Time
 	Transport Transport
@@ -130,7 +129,7 @@ type ValidatedMsg struct {
 
 type SeqMsg struct {
 	Line      string
-	TenantID  string
+	TenantPTR *Tenant
 	Seq       int64
 	PeerIP    netip.Addr
 	Received  time.Time
@@ -191,11 +190,11 @@ func SetupIngestionWithConfig(parent context.Context, cfg IngestConfig) (*Ingest
 		cancel:  cancel,
 	}
 
-	if strings.TrimSpace(cfg.PostgresDSN) != "" {
+	if strings.TrimSpace(cfg.AppCfg.DB.PostgresDSN) != "" {
 		dbCtx, dbCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer dbCancel()
 
-		db, err := OpenDB(dbCtx, cfg.PostgresDSN)
+		db, err := OpenDB(dbCtx, cfg.AppCfg.DB.PostgresDSN)
 		if err != nil {
 			if cfg.DBRequired {
 				cancel()
@@ -313,14 +312,14 @@ func (s *IngestService) validationWorker(workerID int) {
 				return
 			}
 
-			tenantID, ok := s.resolveTenant(msg)
+			tenantPTR, ok := s.resolveTenant(msg)
 			if !ok {
 				debugPrint(log.Printf, levelWarning, "Not allowed / no tenant mapping\n")
 				atomic.AddUint64(&s.linesDropped, 1)
 				continue
 			}
 
-			_, mt := ParseIngestLine(tenantID, msg.Line)
+			_, mt := ParseIngestLine(tenantPTR.TenantID, msg.Line)
 			if mt != reCompl {
 				atomic.AddUint64(&s.linesDropped, 1)
 				continue
@@ -331,7 +330,7 @@ func (s *IngestService) validationWorker(workerID int) {
 
 			out := ValidatedMsg{
 				Line:      msg.Line,
-				TenantID:  tenantID,
+				TenantPTR: tenantPTR,
 				PeerIP:    msg.PeerIP,
 				Received:  msg.Received,
 				Transport: msg.Transport,
@@ -352,30 +351,28 @@ func (s *IngestService) initAuthFuncs() {
 	}
 
 	// "none"
-	s.authFuncs[string(AuthNone)] = func(msg *RawMsg) string {
-		dt := strings.TrimSpace(s.cfg.DefaultTenantID)
-		if dt == "" {
-			return ""
-		}
-		return dt
+	s.authFuncs[string(AuthNone)] = func(msg *RawMsg) *Tenant {
+//		dt := strings.TrimSpace(s.cfg.DefaultTenantPTR.TenantID)
+		return s.getDefaultTenantPTR()
 	}
 
 	// cert
-	s.authFuncs[string(AuthCert)] = func(msg *RawMsg) string {
-		return ""
+	s.authFuncs[string(AuthCert)] = func(msg *RawMsg) *Tenant {
+		return nil
 	}
 
-	s.authFuncs[string(AuthAPIKey)] = func(msg *RawMsg) string {
+	// APIs
+	s.authFuncs[string(AuthAPIKey)] = func(msg *RawMsg) *Tenant {
 		return s.authAPIKeyFromLine(msg)
 	}
 }
 
-func (s *IngestService) ResolveTenantFromAuthList(msg *RawMsg, authLst []AuthMode) (string, bool) {
+func (s *IngestService) ResolveTenantFromAuthList(msg *RawMsg, authLst []AuthMode) (*Tenant, bool) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, authLst=%v\n", *msg, authLst)
 
 	if len(authLst) == 0 {
 		debugPrint(log.Printf, levelWarning, "auth list is empty; dropped\n")
-		return "", false
+		return nil, false
 	}
 
 	if s.authFuncs == nil {
@@ -395,45 +392,45 @@ func (s *IngestService) ResolveTenantFromAuthList(msg *RawMsg, authLst []AuthMod
 			continue
 		}
 
-		tenantID := fn(msg)
-		if tenantID != "" {
-			debugPrint(log.Printf, levelDebug, "auth matched mode=%q tenant=%s\n", mode, tenantID)
-			return tenantID, true
+		tenantPTR := fn(msg)
+		if tenantPTR != nil {
+			debugPrint(log.Printf, levelDebug, "auth matched mode=%q tenant=%s\n", mode, tenantPTR.TenantID)
+			return tenantPTR, true
 		}
 
 		debugPrint(log.Printf, levelDebug, "auth no-match mode=%q\n", mode)
 	}
 
 	debugPrint(log.Printf, levelDebug, "auth failed: no mode matched\n")
-	return "", false
+	return nil, false
 }
 
-func (s *IngestService) resolveTenant(msg *RawMsg) (string, bool) {
+func (s *IngestService) resolveTenant(msg *RawMsg) (*Tenant, bool) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", msg)
 
 	switch msg.Transport {
 	case TransportRaw:
 		debugPrint(log.Printf, levelDebug, "Raw TCP: message received.\n")
-		tenantID, ok := s.ResolveTenantFromAuthList(msg, s.cfg.AuthLst[msg.Transport])
+		tenantPTR, ok := s.ResolveTenantFromAuthList(msg, s.cfg.AuthLst[msg.Transport])
 		if !ok {
-			return "", false
+			return nil, false
 		}
-		return tenantID, true
+		return tenantPTR, true
 	case TransportTLS:
 		debugPrint(log.Printf, levelDebug, "TLS: message received.\n")
-		tenantID, ok := s.ResolveTenantFromAuthList(msg, s.cfg.AuthLst[msg.Transport])
+		tenantPTR, ok := s.ResolveTenantFromAuthList(msg, s.cfg.AuthLst[msg.Transport])
 		if !ok {
-			return "", false
+			return nil, false
 		}
-		return tenantID, true
+		return tenantPTR, true
 	default:
 		debugPrint(log.Printf, levelWarning, "Unknown transportP: dropped.\n");
-		return "", false
+		return nil, false
 	}
 }
 
 type tenantSpool struct {
-	tenantID string
+	tenantPTR *Tenant
 	path     string
 	file     *os.File
 	seq      int64
@@ -475,9 +472,9 @@ func (s *IngestService) spoolerLoop() {
 				return
 			}
 
-			sp, err := s.getOrOpenSpool(spools, msg.TenantID)
+			sp, err := s.getOrOpenSpool(spools, msg.TenantPTR)
 			if err != nil {
-				debugPrint(log.Printf, levelWarning, "spool open failed tenant=%s: %v", msg.TenantID, err)
+				debugPrint(log.Printf, levelWarning, "spool open failed tenant=%s: %v", msg.TenantPTR.TenantID, err)
 				atomic.AddUint64(&s.linesDropped, 1)
 				continue
 			}
@@ -487,7 +484,7 @@ func (s *IngestService) spoolerLoop() {
 
 			record := buildSpoolRecord(seq, msg.Line)
 			if _, err := sp.file.Write(record); err != nil {
-				debugPrint(log.Printf, levelWarning, "spool write failed tenant=%s: %v", msg.TenantID, err)
+				debugPrint(log.Printf, levelWarning, "spool write failed tenant=%s: %v", msg.TenantPTR.TenantID, err)
 				atomic.AddUint64(&s.linesDropped, 1)
 				continue
 			}
@@ -497,7 +494,7 @@ func (s *IngestService) spoolerLoop() {
 
 			out := SeqMsg{
 				Line:      msg.Line,
-				TenantID:  msg.TenantID,
+				TenantPTR:  msg.TenantPTR,
 				Seq:       seq,
 				PeerIP:    msg.PeerIP,
 				Received:  msg.Received,
@@ -513,14 +510,14 @@ func (s *IngestService) spoolerLoop() {
 	}
 }
 
-func (s *IngestService) getOrOpenSpool(spools map[string]*tenantSpool, tenantID string) (*tenantSpool, error) {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %d\n", spools, tenantID)
+func (s *IngestService) getOrOpenSpool(spools map[string]*tenantSpool, tenantPTR *Tenant) (*tenantSpool, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", spools, tenantPTR.TenantID)
 
-	if sp, ok := spools[tenantID]; ok {
+	if sp, ok := spools[tenantPTR.TenantID]; ok {
 		return sp, nil
 	}
 
-	filename := tenantID + ".log"
+	filename := tenantPTR.TenantID + ".log"
 	path := filepath.Join(s.cfg.SpoolDir, filename)
 	debugPrint(log.Printf, levelDebug, "tenant spool file %s\n", filename)
 
@@ -533,25 +530,25 @@ func (s *IngestService) getOrOpenSpool(spools map[string]*tenantSpool, tenantID 
 
 	seq, err := readLastSeqFromSpoolTail(path)
 	if err != nil {
-		debugPrint(log.Printf, levelInfo, "cant fetch seq from spool files for Tenant %s\n", tenantID)
+		debugPrint(log.Printf, levelInfo, "cant fetch seq from spool files for Tenant %s\n", tenantPTR.TenantID)
 	}
 	if s.db != nil {
-		if dbSeq, derr := s.dbMaxSeq(s.ctx, tenantID); derr == nil && dbSeq > seq {
+		if dbSeq, derr := s.dbMaxSeq(s.ctx, tenantPTR); derr == nil && dbSeq > seq {
 			if seq < dbSeq {
 				seq = dbSeq
-				debugPrint(log.Printf, levelInfo, "db ishigher than spool, Tenant %s new initial seq is %d\n", tenantID, seq)
+				debugPrint(log.Printf, levelInfo, "db ishigher than spool, Tenant %s new initial seq is %d\n", tenantPTR.TenantID, seq)
 			}
 		}
 	}
 
 	sp := &tenantSpool{
-		tenantID: tenantID,
-		path:     path,
-		file:     f,
-		seq:      seq,
-		lastSync: time.Now(),
+		tenantPTR: tenantPTR,
+		path:      path,
+		file:      f,
+		seq:       seq,
+		lastSync:  time.Now(),
 	}
-	spools[tenantID] = sp
+	spools[tenantPTR.TenantID] = sp
 	return sp, nil
 }
 
@@ -631,7 +628,7 @@ func (s *IngestService) dbWorker(workerID int) {
 				return
 			}
 
-			ev, _ := ParseIngestLine(msg.TenantID, msg.Line)
+			ev, _ := ParseIngestLine(msg.TenantPTR.TenantID, msg.Line)
 			tmp := msg.PeerIP.String()
 			ev.Transport = msg.Transport.String()
 			ev.SrcIP = &tmp
@@ -668,17 +665,36 @@ func (s *IngestService) dbWorker(workerID int) {
 func (s *IngestService) dbInsertWithSeq(ctx context.Context, msg SeqMsg, ev Event) error {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %v, %v\n", ctx, msg, ev)
 
+	if msg.TenantPTR.Crypt {
+		debugPrint(log.Printf, levelCrazy, "Encryption enabled for payload \"%s\"\n", msg.Line)
+		PubKey, err := base64.StdEncoding.DecodeString(msg.TenantPTR.PubKey)
+		if err != nil {
+			return fmt.Errorf("Error: crypt requested, but not usable password provided. Message dropped.")
+		}
+		crypt, err := cryptString(ev.RawLine, PubKey)
+		if err != nil {
+			return fmt.Errorf("Error: %v. Message dropped.\n", err)
+		}
+		debugPrint(log.Printf, levelCrazy, "Crypt success, new line is \"%s\"\n", crypt)
+		ev.RawLine = crypt
+		crypt, err = cryptString(*ev.Cmd, PubKey)
+		if err != nil {
+			return fmt.Errorf("Error: %v. Message dropped.\n", err)
+		}
+		ev.Cmd = &crypt
+	}
+
 	if inserter := getInsertEventWithSeqFn(s.db); inserter != nil {
 		return inserter(ctx, ev, msg.Seq)
 	}
 	return fmt.Errorf("db insert not implemented: add DB.InsertEventWithSeq")
 }
 
-func (s *IngestService) dbMaxSeq(ctx context.Context, tenantID string) (int64, error) {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", ctx, tenantID)
+func (s *IngestService) dbMaxSeq(ctx context.Context, tenantPTR *Tenant) (int64, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", ctx, tenantPTR.TenantID)
 
 	if maxer := getMaxSeqFn(s.db); maxer != nil {
-		return maxer(ctx, tenantID)
+		return maxer(ctx, tenantPTR.TenantID)
 	}
 	return 0, fmt.Errorf("db max seq not implemented")
 }
@@ -1000,9 +1016,8 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 		}
 		cfg.TLSConfig  = &tlsConfig
 	}
-	cfg.PostgresDSN = opts.Cfg.DB.PostgresDSN
-	cfg.DefaultTenantID = opts.Cfg.Globals.DefaultTenantID
-	cfg.Pepper = opts.Cfg.Globals.Pepper
+//	cfg.DefaultTenantPTR = getDefaultTenantPTR(opts)
+	cfg.AppCfg = &opts.Cfg
 	cfg.RawCIDRRules, err  = parseCfgCidrLst(opts)
 	if err != nil {
 		return cfg, fmt.Errorf("ingestion: error parsing CIDR (%w)\n", err)
@@ -1012,6 +1027,24 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 		return cfg, fmt.Errorf("ingestion: no listeners enabled (raw/tls)")
 	}
 	return cfg, nil
+}
+
+func (s *IngestService) getDefaultTenantPTR() *Tenant {
+	for _, t := range s.cfg.AppCfg.Tenants {
+		if t.TenantID == s.cfg.AppCfg.Globals.DefaultTenantID {
+			return &t
+		}
+	}
+	return nil
+}
+
+func (s *IngestService) getTenantPTR(tenantID string) *Tenant {
+        for _, t := range s.cfg.AppCfg.Tenants  {
+                if t.TenantID == tenantID {
+                        return &t
+                }
+        }
+        return nil
 }
 
 func parseCfgCidrLst(opts *Options) (map[string][]CIDRTenantRule, error) {

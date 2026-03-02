@@ -74,6 +74,8 @@ type Tenant struct {
 	TenantID        string `json:"tenantID"`
 	TenantName      string `json:"tenant_name"`
 	ACL             string `json:"acl"`
+	PubKey		string `json:"pub_key"`
+	Crypt		bool   `json:"crypt"`
 }
 
 type Globals struct {

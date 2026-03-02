@@ -31,6 +31,11 @@ var commands = []Command{
 		Description: "Runs hc as server. Collects history and store in a database.",
 	},
 	{
+		Name:        "gen_asym_key",
+		Handler:     doGenAsym,
+		Description: "Imports legacy history into the database.",
+	},
+	{
 		Name:        "import",
 		Handler:     doImport,
 		Description: "Imports legacy history into the database.",
@@ -51,6 +56,16 @@ func doHelp(version string, args []string) {
 }
 
 func doExport(version string, args []string) {
+}
+
+func doGenAsym(version string, args []string) {
+	privB64, pubB64, err := genAsymKey()
+	if err != nil {
+		fmt.Println("error generating keys: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("PRIVATE (base64):", privB64)
+	fmt.Println("PUBLIC  (base64):", pubB64)
 }
 
 func main() {

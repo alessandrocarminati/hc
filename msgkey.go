@@ -14,16 +14,16 @@ import (
 
 var reAPIKeyID = regexp.MustCompile(`^hc_[0-9a-f]{8}$`)
 
-func (s *IngestService) authAPIKeyFromLine(msg *RawMsg) string {
+func (s *IngestService) authAPIKeyFromLine(msg *RawMsg) *Tenant {
 	debugPrint(log.Printf, levelCrazy, "Extract payload from the strict ingest line %s\n", msg.Line)
 	payload, rest, ok := separatePayloadStrict(msg.Line)
 	if !ok {
-		return ""
+		return nil
 	}
 
 	token, cleaned, ok := ExtractAPIKeyTokenFromPayload(payload)
 	if !ok {
-		return ""
+		return nil
 	}
 	debugPrint(log.Printf, levelCrazy, "Extracted api key token '%s'\n", token)
 
@@ -31,15 +31,15 @@ func (s *IngestService) authAPIKeyFromLine(msg *RawMsg) string {
 	debugPrint(log.Printf, levelCrazy, "Cleaned line '%s'\n", msg.Line)
 	keyID, secret, ok := splitKeyToken(token)
 	if !ok {
-		return ""
+		return nil
 	}
 	debugPrint(log.Printf, levelCrazy, "token parts: key_id=%s Hash=%s\n", keyID, secret)
 
 	if !reAPIKeyID.MatchString(keyID) {
-		return ""
+		return nil
 	}
 	if len(secret) < 16 || len(secret) > 128 {
-		return ""
+		return nil
 	}
 
 	debugPrint(log.Printf, levelCrazy, "Lookup key in DB and verify\n")
@@ -58,21 +58,21 @@ func (s *IngestService) authAPIKeyFromLine(msg *RawMsg) string {
 		where key_id = $1
 	`, keyID).Scan(&tenantID, &keyHash, &revoked)
 	if err != nil {
-		return ""
+		return nil
 	}
 	if revoked.Valid {
-		return ""
+		return nil
 	}
 	debugPrint(log.Printf, levelCrazy, "Key_id exists\n")
 
-	pepper := strings.TrimSpace(s.cfg.Pepper)
+	pepper := s.cfg.AppCfg.Globals.Pepper
 	if !verifySecretSHA256(secret, pepper, keyHash) {
-		return ""
+		return nil
 	}
 
 	debugPrint(log.Printf, levelCrazy, "msg =%v\n", msg)
 
-	return strings.TrimSpace(tenantID)
+	return s.getTenantPTR(tenantID)
 }
 
 func separatePayloadStrict(line string) (string, string, bool) {

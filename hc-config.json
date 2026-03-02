@@ -76,7 +76,9 @@
     {
       "tenantID": "00000000-1111-2222-3333-444444444444",
       "tenant_name": "tenant1",
-      "acl": "tenant1_acl"
+      "acl": "tenant1_acl",
+      "crypt": true,
+      "pub_key": "yJd7XF+Ge61dH2Ly/40CAek/1zces5bR+m2Kar9BglI="
     }
   ],
   "globals": {

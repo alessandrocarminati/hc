@@ -274,6 +274,96 @@ or outbound access to the collector's network, as long as you can SSH into
 them from your workstation without leaving a single byte of configuration
 on the remote host.
 
+## Tenant-Level Asymmetric Encryption (Optional)
+
+`hc` can encrypt command lines at rest using tenant-specific asymmetric
+encryption.
+
+When enabled, ingested commands for that tenant are encrypted before being 
+stored in PostgreSQL.
+
+This ensures:
+
+* The database cannot read tenant history
+* A DB dump does not reveal plaintext commands
+* Only someone with the correct private key can decrypt entries during export
+
+### How It Works
+
+* Each tenant can enable encryption in hc-config.json
+* A public key is stored in the configuration
+* During ingestion:
+    * Commands are encrypted with the tenant public key
+    * The encrypted blob is stored in cmd_events
+* During export:
+    * If a correct private key is provided via query parameter key=
+    * Entries are decrypted on-the-fly
+    * Otherwise, encrypted blobs are returned as-is
+
+No keys are persisted in memory after request completion.
+
+### Configuration Example
+Add the following fields in the tenant definition:
+
+```
+{ 
+  "tenantID": "00000000-1111-2222-3333-444444444444",
+  "tenant_name": "tenant1",
+  "acl": "tenant1_acl",
+  "crypt": true,
+  "pub_key": "<base64_public_key>"
+}
+```
+￼
+Fields
+| Field     | Description                                   |
+|-----------|-----------------------------------------------|
+| `crypt`   | Enables encryption for this tenant            |
+| `pub_key` | Base64-encoded public key used for encryption |
+
+### Generating a Keypair
+
+Use the built-in helper:
+```
+$ ./hc.app gen_asym_key
+public_key:  <base64_public_key>
+private_key: <base64_private_key>
+```
+*note*: store the keys safely, The key pairs are shown once only.
+
+### Exporting Encrypted History
+To decrypt during export:
+
+```
+wget "https://hc.example.com:8443/export?grep1=make&key=<base64_private_key>" -O - -q
+
+```
+If:
+
+* key is missing
+* key is wrong
+* entry belongs to encrypted tenant
+
+Then:
+
+* The encrypted payload is returned as plaintext ciphertext.
+
+This preserves:
+
+* deterministic export behavior
+* grep-ability of non-encrypted tenants
+* zero branching logic on the client side
+
+### Security Notes
+
+* The private key provided via `key=`:
+    * Is never stored
+    * Is never cached
+    * Is discarded immediately after request handling
+* Do NOT use `debug` or `crazy` log levels when using encryption.
+  The `key` query parameter may appear in logs.
+* Encryption is per-tenant. Mixed encrypted and non-encrypted tenants are supported.
+
 ## Status (as for v0.3)
 
 * [OK] Plain + TLS ingestion
@@ -281,6 +371,7 @@ on the remote host.
 * [OK] API key authentication
 * [OK] Text export over HTTP
 * [OK] HTTPS export auth (client certs, API keys)
+* [OK] Encrypted Database
 * [WIP] SQLite support
 * [WIP] Web UI (optional, not a priority)
 

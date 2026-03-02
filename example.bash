@@ -56,7 +56,7 @@ sshl() {
 
     local cb='export SESSIONID_=$(date +%Y%m%d.%H%M%S|sha1sum|cut -c1-8);'
     local tr="nc 127.0.0.1 ${iport}"
-    [ "$imode" = "2" ] && tr="socat - OPENSSL:127.0.0.1:${iport},verify=${iverify}"
+    [ "$imode" = "2" ] && tr="socat - OPENSSL:127.0.0.1:${iport},verify=${iverify} 2>&1 </dev/null >/dev/null"
 
     local dc="command -v"
     local chk_i='nc' && [ "$imode" = "2" ] && chk_i='socat'

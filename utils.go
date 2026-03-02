@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/google/uuid"
+
 )
 
 type Options struct {
@@ -41,13 +42,13 @@ func getRuntimeConf(version string, args []string) (*Options, error) {
 
 func ResolveOptions(cfg Config, cl CommandLine, verstr string) (*Options, error) {
 	o := Options{
-		Cfg:      cfg,
-		LogLevel: cl.LogLevel,
+		Cfg:	   cfg,
+		LogLevel:  cl.LogLevel,
 	}
 
 	err := cfg.validate()
-	if err != nil {
-		return nil, err
+	if  err != nil {
+		return  nil, err
 	}
 
 	o.LogLevel = cl.LogLevel
@@ -57,3 +58,4 @@ func ResolveOptions(cfg Config, cl CommandLine, verstr string) (*Options, error)
 	o.AKTenantID = cl.AKTenantID
 	return &o, nil
 }
+

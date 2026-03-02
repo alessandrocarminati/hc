@@ -1,9 +1,9 @@
 package main
 
 import (
-	"log"
 	"regexp"
 	"strings"
+	"log"
 )
 
 type regexpmatch uint8

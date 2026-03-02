@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/google/uuid"
+        "github.com/google/uuid"
 )
 
 type CommandLine struct {
@@ -18,11 +18,11 @@ type CommandLine struct {
 
 func ParseCommandLine(args []string) (CommandLine, error) {
 	var (
-		cl           CommandLine
-		lL           string
-		tmpSTenantID string
-		tmpSUserID   string
-		err          error
+		cl		CommandLine
+		lL		string
+		tmpSTenantID	string
+		tmpSUserID	string
+		err		error
 	)
 
 	fs := flag.NewFlagSet("hc", flag.ContinueOnError)
@@ -40,14 +40,14 @@ func ParseCommandLine(args []string) (CommandLine, error) {
 		return CommandLine{}, err
 	}
 
-	if tmpSTenantID != "" {
+	if tmpSTenantID!= "" {
 		cl.AKTenantID, err = uuid.Parse(tmpSTenantID)
 		if err != nil {
 			return CommandLine{}, fmt.Errorf("apikey: invalid tenant uuid: %w", err)
 		}
 	}
 
-	if tmpSTenantID != "" {
+	if tmpSTenantID!= "" {
 		cl.AKUserID, err = uuid.Parse(tmpSUserID)
 		if err != nil {
 			return CommandLine{}, fmt.Errorf("apikey: invalid userid uuid: %w", err)
@@ -56,10 +56,11 @@ func ParseCommandLine(args []string) (CommandLine, error) {
 
 	l, err := DebugLevelFromString(lL)
 	if err != nil {
-		return CommandLine{}, err
+		 return CommandLine{}, err
 	}
 
 	cl.LogLevel = l
 
 	return cl, nil
 }
+

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -11,13 +12,11 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
-
 type Transport uint8
 
 const (
@@ -39,13 +38,14 @@ func (t Transport) String() string {
 type authFunc func(msg *RawMsg) string
 
 type IngestParsed struct {
-	TsStr   string
-	Time    time.Time
-	Session string
-	Host    string
-	Cwd     string
-	Payload string
+	TsStr    string
+	Time     time.Time
+	Session  string
+	Host     string
+	Cwd      string
+	Payload  string
 }
+
 
 type CIDRTenantRule struct {
 	Prefix   netip.Prefix
@@ -56,54 +56,54 @@ type CIDRTenantRule struct {
 
 type IngestConfig struct {
 	// listeners
-	RawEnabled bool
-	RawAddr    string
+	RawEnabled	bool
+	RawAddr		string
 
-	TLSEnabled bool
-	TLSAddr    string
-	TLSConfig  *tls.Config
+	TLSEnabled	bool
+	TLSAddr		string
+	TLSConfig	*tls.Config
 
 	// worker counts / queues
 	ValidateWorkers int
 	DBWorkers       int
 	QueueDepth      int
 
-	MaxLineBytes int
+	MaxLineBytes	int
 
 	// tenancy
 	DefaultTenantID string
 	RawCIDRRules    map[string][]CIDRTenantRule
-	AuthLst         map[Transport][]AuthMode
-	Pepper          string
+	AuthLst		map[Transport][]AuthMode
+	Pepper		string
 
 	// spooling
-	SpoolDir        string
-	SpoolSyncEveryN int
-	SpoolSyncEvery  time.Duration
+	SpoolDir	string
+	SpoolSyncEveryN	int
+	SpoolSyncEvery	time.Duration
 
 	// db
-	PostgresDSN string
-	DBRequired  bool
+	PostgresDSN	string
+	DBRequired	bool
 }
 
 type IngestService struct {
-	cfg       IngestConfig
-	db        *DB
-	authFuncs map[string]authFunc
+	cfg           IngestConfig
+	db            *DB
+	authFuncs     map[string]authFunc
 
 	// channels between stages
-	rawCh   chan *RawMsg
-	spoolCh chan ValidatedMsg
-	dbCh    chan SeqMsg
+	rawCh         chan *RawMsg
+	spoolCh       chan ValidatedMsg
+	dbCh          chan SeqMsg
 
 	// cancellation
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
 
 	// listeners
-	rawLn net.Listener
-	tlsLn net.Listener
+	rawLn         net.Listener
+	tlsLn         net.Listener
 
 	// metrics
 	linesAccepted uint64
@@ -114,10 +114,10 @@ type IngestService struct {
 }
 
 type RawMsg struct {
-	Line      string
-	PeerIP    netip.Addr
-	Received  time.Time
-	Transport Transport
+	Line          string
+	PeerIP        netip.Addr
+	Received      time.Time
+	Transport     Transport
 }
 
 type ValidatedMsg struct {
@@ -148,7 +148,6 @@ var reIngestStrict = regexp.MustCompile(
 		`(?P<payload>.*)` +
 		`$`,
 )
-
 func SetupIngestion(parent context.Context, opts *Options) (*IngestService, error) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", parent, opts)
 
@@ -215,9 +214,9 @@ func SetupIngestionWithConfig(parent context.Context, cfg IngestConfig) (*Ingest
 					debugPrint(log.Printf, levelWarning, "warning: ensure schema failed: %v", err)
 				}
 			}
-			if err != nil {
-				debugPrint(log.Printf, levelInfo, "warning: database has no max seq")
-			}
+		if err != nil {
+			debugPrint(log.Printf, levelInfo, "warning: database has no max seq")
+		}
 
 		}
 	} else if cfg.DBRequired {
@@ -327,6 +326,7 @@ func (s *IngestService) validationWorker(workerID int) {
 				continue
 			}
 
+
 			atomic.AddUint64(&s.linesAccepted, 1)
 
 			out := ValidatedMsg{
@@ -427,7 +427,7 @@ func (s *IngestService) resolveTenant(msg *RawMsg) (string, bool) {
 		}
 		return tenantID, true
 	default:
-		debugPrint(log.Printf, levelWarning, "Unknown transportP: dropped.\n")
+		debugPrint(log.Printf, levelWarning, "Unknown transportP: dropped.\n");
 		return "", false
 	}
 }
@@ -483,7 +483,7 @@ func (s *IngestService) spoolerLoop() {
 			}
 			sp.seq++
 			seq := sp.seq
-			debugPrint(log.Printf, levelDebug, "Sequence number assigned (%d)\n", seq)
+			debugPrint(log.Printf, levelDebug, "Sequence number assigned (%d)\n", seq);
 
 			record := buildSpoolRecord(seq, msg.Line)
 			if _, err := sp.file.Write(record); err != nil {
@@ -523,6 +523,7 @@ func (s *IngestService) getOrOpenSpool(spools map[string]*tenantSpool, tenantID 
 	filename := tenantID + ".log"
 	path := filepath.Join(s.cfg.SpoolDir, filename)
 	debugPrint(log.Printf, levelDebug, "tenant spool file %s\n", filename)
+
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640)
 	if err != nil {
@@ -980,10 +981,10 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 	var err error
 
 	cfg.RawEnabled = opts.Cfg.Server.IngestClear.Enabled
-	cfg.RawAddr = opts.Cfg.Server.IngestClear.Addr
+	cfg.RawAddr    = opts.Cfg.Server.IngestClear.Addr
 	cfg.TLSEnabled = opts.Cfg.Server.IngestTLS.Enabled
-	cfg.TLSAddr = opts.Cfg.Server.IngestTLS.Addr
-	cfg.AuthLst = make(map[Transport][]AuthMode, 2)
+	cfg.TLSAddr    = opts.Cfg.Server.IngestTLS.Addr
+	cfg.AuthLst    = make(map[Transport][]AuthMode, 2)
 
 	cfg.AuthLst[TransportRaw] = opts.Cfg.Server.IngestClear.Auth
 	cfg.AuthLst[TransportTLS] = opts.Cfg.Server.IngestTLS.Auth
@@ -995,14 +996,14 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 		}
 		tlsConfig := tls.Config{
 			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
+			MinVersion: tls.VersionTLS12,
 		}
-		cfg.TLSConfig = &tlsConfig
+		cfg.TLSConfig  = &tlsConfig
 	}
 	cfg.PostgresDSN = opts.Cfg.DB.PostgresDSN
 	cfg.DefaultTenantID = opts.Cfg.Globals.DefaultTenantID
 	cfg.Pepper = opts.Cfg.Globals.Pepper
-	cfg.RawCIDRRules, err = parseCfgCidrLst(opts)
+	cfg.RawCIDRRules, err  = parseCfgCidrLst(opts)
 	if err != nil {
 		return cfg, fmt.Errorf("ingestion: error parsing CIDR (%w)\n", err)
 	}

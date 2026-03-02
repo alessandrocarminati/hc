@@ -71,16 +71,16 @@ type ACLRule struct {
 }
 
 type Tenant struct {
-	TenantID   string `json:"tenantID"`
-	TenantName string `json:"tenant_name"`
-	ACL        string `json:"acl"`
+	TenantID        string `json:"tenantID"`
+	TenantName      string `json:"tenant_name"`
+	ACL             string `json:"acl"`
 }
 
 type Globals struct {
 	Identity        Identity `json:"identity"`
 	MaxLineBytes    int      `json:"max_line_bytes"`
 	MaxRows         int      `json:"max_rows"`
-	ClientCert      string   `json:"client_cert"`
+	ClientCert	string   `json:"client_cert"`
 	DefaultTenantID string   `json:"default_tenant_id"`
 	MaxSeconds      int      `json:"max_seconds"`
 	Pepper          string   `json:"apikey_pepper"`
@@ -92,11 +92,10 @@ type Identity struct {
 }
 
 type CommonConfig interface {
-	GetEnabled() bool
-	GetAddr() string
-	GetAuth() []AuthMode
+    GetEnabled() bool
+    GetAddr() string
+    GetAuth() []AuthMode
 }
-
 func (l ListenerConfig) GetEnabled() bool    { return l.Enabled }
 func (l ListenerConfig) GetAddr() string     { return l.Addr }
 func (l ListenerConfig) GetAuth() []AuthMode { return l.Auth }

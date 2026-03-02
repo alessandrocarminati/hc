@@ -1,10 +1,10 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log"
+	"context"
 	"os"
+	"log"
 )
 
 func doImport(version string, args []string) {
@@ -47,7 +47,7 @@ func doImport(version string, args []string) {
 
 	debugPrint(log.Printf, levelDebug, "fetch TenantName\n")
 	TenantName, exists, err := db.GetTenantName(ctx, opts.Cfg.Globals.DefaultTenantID)
-	if err != nil || !exists {
+	if err != nil || !exists{
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

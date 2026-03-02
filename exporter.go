@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,6 +47,7 @@ type exportQuery struct {
 	Limit int
 
 	Color string
+	Key   string
 }
 
 func getIP(r *http.Request) string {
@@ -262,7 +264,7 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 	}
 	defer rows.Close()
 
-	encErr := streamRowsAsText(ctx, w, flusher, rows, pipe)
+	encErr := streamRowsAsText(ctx, w, flusher, rows, pipe, q.Key)
 	if encErr != nil {
 		if !errors.Is(encErr, context.Canceled) && !errors.Is(encErr, context.DeadlineExceeded) {
 			log.Printf("export_unsecure stream error: %v", encErr)
@@ -282,6 +284,7 @@ func parseExportQuery(r *http.Request, maxRows int) (exportQuery, error) {
 
 		Order: strings.TrimSpace(v.Get("order")),
 		Color: strings.TrimSpace(v.Get("color")),
+		Key:   strings.TrimSpace(v.Get("key")),
 	}
 
 	if q.Order == "" {
@@ -382,9 +385,11 @@ func exportOrderSQL(order string) (string, error) {
 	}
 }
 
-func streamRowsAsText(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, rows *sql.Rows, pipe *GrepPipeline) error {
+func streamRowsAsText(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, rows *sql.Rows, pipe *GrepPipeline, key string) error {
 	const flushEvery = 200
 	n := 0
+
+	debugPrint(log.Printf, levelCrazy, "processing text with key='%s'\n", key)
 
 	for rows.Next() {
 		select {
@@ -401,6 +406,24 @@ func streamRowsAsText(ctx context.Context, w http.ResponseWriter, flusher http.F
 		line := strings.TrimRight(rawLine, "\r\n")
 		if !pipe.Match(line) {
 			continue
+		}
+
+		if key != "" {
+			for {
+				debugPrint(log.Printf, levelCrazy, "Decrypt '%s' using '%s'\n", line, key)
+				PrivKey, err := base64.StdEncoding.DecodeString(key)
+				if err != nil {
+					debugPrint(log.Printf, levelWarning, "Ecryption key does not work(%v), fallback unencrypted.\n", err)
+					break
+				}
+				decr, err := decryptString(line, PrivKey)
+				if err != nil {
+					debugPrint(log.Printf, levelWarning, "Ecryption key can not decrypt(%v), fallback unencrypted.\n", err)
+					break
+				}
+				line = decr
+				break
+			}
 		}
 
 		if pipe.ColorEnabled() {

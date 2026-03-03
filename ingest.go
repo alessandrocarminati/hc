@@ -352,7 +352,6 @@ func (s *IngestService) initAuthFuncs() {
 
 	// "none"
 	s.authFuncs[string(AuthNone)] = func(msg *RawMsg) *Tenant {
-		//		dt := strings.TrimSpace(s.cfg.DefaultTenantPTR.TenantID)
 		return s.getDefaultTenantPTR()
 	}
 
@@ -1015,7 +1014,7 @@ func NewIngestConfigFromOptions(opts *Options) (IngestConfig, error) {
 		}
 		cfg.TLSConfig = &tlsConfig
 	}
-	//	cfg.DefaultTenantPTR = getDefaultTenantPTR(opts)
+
 	cfg.AppCfg = &opts.Cfg
 	cfg.RawCIDRRules, err = parseCfgCidrLst(opts)
 	if err != nil {

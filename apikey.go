@@ -42,7 +42,7 @@ func CreateAPIKey(opts *Options) error {
 	if err != nil {
 		return err
 	}
-	defer db.SQL.Close()
+	defer db.Close()
 
 	debugPrint(log.Printf, levelDebug, "perform checks: user=%s, tenant=%s\n", opts.AKUserID.String(), opts.AKTenantID.String())
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -85,7 +85,7 @@ func CreateAPIKey(opts *Options) error {
 PRINT:
 	apiKey := keyID + "." + secret
 	fmt.Printf("tenant_id: %s\n", opts.AKTenantID.String())
-	if &opts.AKUserID != nil {
+	if opts.AKUserID != uuid.Nil {
 		fmt.Printf("user_id:   %s\n", opts.AKUserID.String())
 	}
 	fmt.Printf("key_id:    %s\n", keyID)

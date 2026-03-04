@@ -47,7 +47,7 @@ func ParseCommandLine(args []string) (CommandLine, error) {
 		}
 	}
 
-	if tmpSTenantID != "" {
+	if tmpSUserID != "" {
 		cl.AKUserID, err = uuid.Parse(tmpSUserID)
 		if err != nil {
 			return CommandLine{}, fmt.Errorf("apikey: invalid userid uuid: %w", err)

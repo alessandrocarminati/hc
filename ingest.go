@@ -900,7 +900,11 @@ type maxSeqFn func(context.Context, string) (int64, error)
 
 func getEnsureSchemaFn(db *DB) ensureSchemaFn {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", db)
-	return nil
+	if db == nil {
+		debugPrint(log.Printf, levelError, "No DB: failing.\n")
+		return nil
+	}
+	return db.EnsureSchema
 }
 
 func getInsertEventWithSeqFn(db *DB) insertEventWithSeqFn {

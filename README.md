@@ -115,7 +115,7 @@ Notes:
 
 Use the `api_key` verb on the server:
 ```
-./hc.app apy_key \
+./hc.app api_key \
         -config hc-config.json \
         -loglevel info \
         -api_tenantid 11111111-1111-1111-1111-111111111111 \

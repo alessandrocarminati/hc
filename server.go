@@ -13,14 +13,6 @@ import (
 	"syscall"
 )
 
-var bufsiz int = 4 * 1048576
-
-type data struct {
-	Str  []byte
-	Size int
-	Keep bool
-}
-
 func doRunServe(version string, args []string) {
 	opts, err := getRuntimeConf(version, args)
 	if err != nil {

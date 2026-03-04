@@ -28,17 +28,13 @@ type connData struct {
 	DstPort    uint16
 	IsTLS      bool
 	ServerName string
+	TLS        *tls.ConnectionState
 
 	// HTTP
 	Method  string
 	Path    string
 	Host    string
 	Headers http.Header
-
-	// TLS
-	TLS              *tls.ConnectionState
-	PeerCertificates []*tls.Certificate
-	PeerCerts        []*tls.Certificate
 }
 
 type authFn func(c connData) authRes

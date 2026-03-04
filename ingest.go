@@ -12,7 +12,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -135,18 +134,6 @@ type SeqMsg struct {
 	Received  time.Time
 	Transport Transport
 }
-
-var reIngestStrict = regexp.MustCompile(
-	`^` +
-		`(?P<ts>\d{8}\.\d{6})` +
-		`\s*-\s*` +
-		`(?:(?P<sid>[0-9a-f]{8})\s*-\s*)?` +
-		`(?P<host>[A-Za-z0-9._-]+)` +
-		`(?:\s+\[cwd=(?P<cwd>[^\]]+)\])?` +
-		`\s+>\s+` +
-		`(?P<payload>.*)` +
-		`$`,
-)
 
 func SetupIngestion(parent context.Context, opts *Options) (*IngestService, error) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", parent, opts)

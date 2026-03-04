@@ -12,7 +12,20 @@ import (
 	"time"
 )
 
-var reAPIKeyID = regexp.MustCompile(`^hc_[0-9a-f]{8}$`)
+var (
+	reAPIKeyID     = regexp.MustCompile(`^hc_[0-9a-f]{8}$`)
+	reIngestStrict = regexp.MustCompile(
+		`^` +
+			`(?P<ts>\d{8}\.\d{6})` +
+			`\s*-\s*` +
+			`(?:(?P<sid>[0-9a-f]{8})\s*-\s*)?` +
+			`(?P<host>[A-Za-z0-9._-]+)` +
+			`(?:\s+\[cwd=(?P<cwd>[^\]]+)\])?` +
+			`\s+>\s+` +
+			`(?P<payload>.*)` +
+			`$`,
+	)
+)
 
 func (s *IngestService) authAPIKeyFromLine(msg *RawMsg) *Tenant {
 	debugPrint(log.Printf, levelCrazy, "Extract payload from the strict ingest line %s\n", msg.Line)

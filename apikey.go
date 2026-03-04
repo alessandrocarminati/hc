@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -118,14 +117,6 @@ func generateSecret() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func hashSecretSHA256(secret, pepper string) string {
-	h := sha256.New()
-	h.Write([]byte(secret))
-	h.Write([]byte(":"))
-	h.Write([]byte(pepper))
-	return hex.EncodeToString(h.Sum(nil))
 }
 
 func isUniqueViolation(err error) bool {

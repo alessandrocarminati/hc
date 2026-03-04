@@ -150,11 +150,15 @@ func splitKeyToken(tok string) (keyID, secret string, ok bool) {
 	return tok[:i], tok[i+1:], true
 }
 
-func verifySecretSHA256(secret, pepper, storedHash string) bool {
+func hashSecretSHA256(secret, pepper string) string {
 	h := sha256.New()
 	h.Write([]byte(secret))
 	h.Write([]byte(":"))
 	h.Write([]byte(pepper))
-	sum := hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func verifySecretSHA256(secret, pepper, storedHash string) bool {
+	sum := hashSecretSHA256(secret, pepper)
 	return subtle.ConstantTimeCompare([]byte(sum), []byte(storedHash)) == 1
 }

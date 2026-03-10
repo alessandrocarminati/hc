@@ -1,0 +1,401 @@
+commit f8903575275d9fe8fe864cce5e7beac6e7ff1f23
+Author: Alessandro Carminati <alessandro.carminati@gmail.com>
+Date:   Tue Mar 10 22:25:14 2026 +0100
+
+    Add hc package to buildroot
+    
+    Signed-off-by: Alessandro Carminati <alessandro.carminati@gmail.com>
+
+diff --git a/package/Config.in b/package/Config.in
+index 371a1c33..79933297 100644
+--- a/package/Config.in
++++ b/package/Config.in
+@@ -187,6 +187,7 @@ menu "Development tools"
+ 	source "package/git-crypt/Config.in"
+ 	source "package/gperf/Config.in"
+ 	source "package/grep/Config.in"
++	source "package/hc/Config.in"
+ 	source "package/jo/Config.in"
+ 	source "package/jq/Config.in"
+ 	source "package/libtool/Config.in"
+diff --git a/package/hc/Config.in b/package/hc/Config.in
+new file mode 100644
+index 00000000..e5b2ef8b
+--- /dev/null
++++ b/package/hc/Config.in
+@@ -0,0 +1,99 @@
++config BR2_PACKAGE_HC
++	bool "hc"
++	depends on BR2_TOOLCHAIN_HAS_THREADS
++	depends on BR2_PACKAGE_HOST_GO_TARGET_ARCH_SUPPORTS
++	select BR2_PACKAGE_POSTGRESQL_FULL
++	help
++	  hc is a lightweight service that centralizes shell history into a
++	  PostgreSQL backend.
++
++if BR2_PACKAGE_HC
++
++config BR2_PACKAGE_HC_CFG_POSTGRES_HOST
++	string "PostgreSQL host"
++	default "127.0.0.1"
++	help
++	  Psql addr to connect
++
++config BR2_PACKAGE_HC_CFG_POSTGRES_PORT
++	int "PostgreSQL port"
++	default 5432
++	range 1 65535
++	help
++	  Psql listening port.
++
++config BR2_PACKAGE_HC_CFG_POSTGRES_DBNAME
++	string "PostgreSQL database name"
++	default "history"
++	help
++	  Database name on the psql.
++
++config BR2_PACKAGE_HC_CFG_POSTGRES_USER
++	string "PostgreSQL user"
++	default "hc"
++	help
++	  since the user is embedded in the schema, for the time being leave
++	  this as default.
++
++config BR2_PACKAGE_HC_CFG_POSTGRES_PASSWORD
++	string "PostgreSQL password"
++	default "hc"
++	help
++	  Password for the hc user in psql. Stronger is better.
++
++config BR2_PACKAGE_HC_CFG_INGEST_CLEAR_PORT
++	int "Clear ingest TCP port"
++	default 1234
++	range 1 65535
++	help
++	  Port where hc will listen clear text traffic.
++
++config BR2_PACKAGE_HC_CFG_INGEST_TLS_PORT
++	int "TLS ingest TCP port"
++	default 1235
++	range 1 65535
++	help
++	  Port where hc will listen TLS text traffic.
++
++config BR2_PACKAGE_HC_CFG_HTTP_PORT
++	int "HTTP export port"
++	default 8080
++	range 1 65535
++	help
++	  Exporter http endpoint, where you direct your curl/wget requests.
++
++config BR2_PACKAGE_HC_CFG_HTTPS_PORT
++	int "HTTPS export port"
++	default 8443
++	range 1 65535
++	help
++	  Exporter https endpoint, where you direct your curl/wget requests.
++
++config BR2_PACKAGE_HC_CFG_DEFAULT_TENANT_ID
++	string "Default tenant UUID"
++	default "999bbaaa-dddd-2222-5555-aa5555444444"
++	help
++	  Default tenant UUID. Kinda hardcoded right now, leave it as is.
++
++config BR2_PACKAGE_HC_CFG_TENANT_NAME
++	string "Default tenant name"
++	default "Main"
++	help
++	  Tenant name, not used for now..
++
++config BR2_PACKAGE_HC_CFG_APIKEY_PEPPER
++	string "API key pepper"
++	default "Pepper."
++	help
++	  Used to not write apikey in database in cleartext.
++
++config BR2_PACKAGE_HC_CFG_CERT_CN
++	string "Self-signed certificate CN"
++	default "buildroot-hc"
++	help
++	  Certificate name for the self signed ssl cert.
++
++endif
++
++comment "hc needs a toolchain w/ threads + a supported Go target architecture"
++	depends on !BR2_TOOLCHAIN_HAS_THREADS || !BR2_PACKAGE_HOST_GO_TARGET_ARCH_SUPPORTS
+diff --git a/package/hc/S59hc-init b/package/hc/S59hc-init
+new file mode 100644
+index 00000000..68ae0dc5
+--- /dev/null
++++ b/package/hc/S59hc-init
+@@ -0,0 +1,16 @@
++#!/bin/sh
++
++case "$1" in
++	start)
++		/usr/bin/hc-db-init.sh || exit 1
++		;;
++	stop)
++		;;
++	restart)
++		/usr/bin/hc-db-init.sh || exit 1
++		;;
++	*)
++		echo "Usage: $0 {start|stop|restart}"
++		exit 1
++		;;
++esac
+diff --git a/package/hc/S60hc b/package/hc/S60hc
+new file mode 100644
+index 00000000..55a2a6a3
+--- /dev/null
++++ b/package/hc/S60hc
+@@ -0,0 +1,40 @@
++#!/bin/sh
++
++DAEMON=/usr/bin/hc
++PIDFILE=/var/run/hc.pid
++CONFIG=/etc/hc/hc-config.json
++
++start() {
++	printf "Starting hc: "
++	start-stop-daemon -S -q -m -p "$PIDFILE" -b -x "$DAEMON" -- \
++		serve -config "$CONFIG" -loglevel info
++	echo "OK"
++}
++
++stop() {
++	printf "Stopping hc: "
++	start-stop-daemon -K -q -p "$PIDFILE"
++	rm -f "$PIDFILE"
++	echo "OK"
++}
++
++restart() {
++	stop
++	start
++}
++
++case "$1" in
++	start)
++		start
++		;;
++	stop)
++		stop
++		;;
++	restart)
++		restart
++		;;
++	*)
++		echo "Usage: $0 {start|stop|restart}"
++		exit 1
++		;;
++esac
+diff --git a/package/hc/hc-config.json.in b/package/hc/hc-config.json.in
+new file mode 100644
+index 00000000..a017c766
+--- /dev/null
++++ b/package/hc/hc-config.json.in
+@@ -0,0 +1,57 @@
++{
++  "server": {
++    "ingest_clear": {
++      "enabled": true,
++      "addr": "0.0.0.0:@INGEST_CLEAR_PORT@",
++      "auth": ["none"]
++    },
++    "ingest_tls": {
++      "enabled": true,
++      "addr": "0.0.0.0:@INGEST_TLS_PORT@",
++      "auth": ["cert", "apikey"]
++    },
++    "http": {
++      "enabled": true,
++      "addr": "0.0.0.0:@HTTP_PORT@",
++      "auth": ["none"]
++    },
++    "https": {
++      "enabled": true,
++      "addr": "0.0.0.0:@HTTPS_PORT@",
++      "auth": ["cert", "apikey", "none"]
++    }
++  },
++  "db": {
++    "postgres_dsn": "host=@PGHOST@ port=@PGPORT@ user=@PGUSER@ password=@PGPASSWORD@ dbname=@PGDATABASE@ sslmode=disable"
++  },
++  "acl": [
++    {
++      "id": "tenant_main_acl",
++      "rules": [
++        {
++          "CIDR": "0.0.0.0/0",
++          "action": "allow",
++          "name": "Any"
++        }
++      ]
++    }
++  ],
++  "tenants": [
++    {
++      "tenantID": "@TENANT_ID@",
++      "tenant_name": "@TENANT_NAME@",
++      "acl": "tenant_main_acl"
++    }
++  ],
++  "globals": {
++    "identity": {
++      "cert_file": "/etc/hc/buildroot.crt",
++      "key_file": "/etc/hc/buildroot.key"
++    },
++    "max_line_bytes": 65536,
++    "max_rows": 200000,
++    "max_seconds": 30,
++    "default_tenant_id": "@TENANT_ID@",
++    "apikey_pepper": "@APIKEY_PEPPER@"
++  }
++}
+diff --git a/package/hc/hc-db-init.sh.in b/package/hc/hc-db-init.sh.in
+new file mode 100644
+index 00000000..74e0af90
+--- /dev/null
++++ b/package/hc/hc-db-init.sh.in
+@@ -0,0 +1,21 @@
++#!/bin/sh
++
++schema_exists() {
++	echo -n "Checking database..."
++	res=1
++	psql -U postgres postgres -tAc "SELECT datname FROM pg_database where datname='@PGDATABASE@'" | grep -q @PGDATABASE@ && \
++	psql -U postgres @PGDATABASE@ -tAc \
++		"select 1 from information_schema.tables where table_name='tenants'" | grep -q 1 && res=0
++	return ${res}
++}
++
++if ! schema_exists; then
++	echo -ne "\nInitializing the new database..."
++	psql -U postgres postgres -c "CREATE ROLE @PGUSER@ LOGIN PASSWORD '@PGPASSWORD@'" &>/dev/null &&  echo -ne "\nCreating the new role (@PGUSER@)..."
++	psql -U postgres postgres -c "create database @PGDATABASE@" &>/dev/null &&  echo -ne "\nCreating new database (@PGDATABASE@)..."
++	psql -U postgres postgres -c "grant all privileges on database @PGDATABASE@ to @PGUSER@ " &>/dev/null && echo -ne "\nAssign permissions to database..."
++	psql -U postgres @PGDATABASE@ -f /usr/share/hc/schema.sql &>/dev/null && echo -ne "\nImporting schema..."
++	psql -U postgres @PGDATABASE@ -f /usr/share/hc/seed.sql &>/dev/null && echo -ne "\nInitializing tenants..."
++fi
++
++echo
+diff --git a/package/hc/hc.mk b/package/hc/hc.mk
+new file mode 100644
+index 00000000..db503e12
+--- /dev/null
++++ b/package/hc/hc.mk
+@@ -0,0 +1,97 @@
++################################################################################
++#
++# hc
++#
++################################################################################
++
++HC_VERSION = 636215cc12c267fbe4342637a303eed71b7dc743
++HC_SITE = https://github.com/alessandrocarminati/hc.git
++HC_SITE_METHOD = git
++HC_LICENSE = GPL-3.0
++HC_LICENSE_FILES = LICENSE.md
++HC_DEPENDENCIES = postgresql host-openssl
++
++HC_GOMOD = hc
++HC_BUILD_TARGETS = .
++
++HC_CONF_DIR = $(TARGET_DIR)/etc/hc
++HC_CERT_FILE = /etc/hc/buildroot.crt
++HC_KEY_FILE = /etc/hc/buildroot.key
++HC_CONFIG_FILE = /etc/hc/hc-config.json
++
++define HC_INSTALL_DB_ASSETS
++	$(INSTALL) -d $(TARGET_DIR)/usr/share/hc
++	$(INSTALL) -m 0644  $(@D)/pg_schema.sql \
++		$(TARGET_DIR)/usr/share/hc/schema.sql
++	$(INSTALL) -m 0644 $(HC_PKGDIR)/seed.sql.in \
++		$(TARGET_DIR)/usr/share/hc/seed.sql
++	$(SED) 's#@TENANT_ID@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_DEFAULT_TENANT_ID))#g' \
++		$(TARGET_DIR)/usr/share/hc/seed.sql
++
++	$(INSTALL) -m 0755 $(HC_PKGDIR)/hc-db-init.sh.in \
++		$(TARGET_DIR)/usr/bin/hc-db-init.sh
++	$(SED) 's#@PGDATABASE@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_POSTGRES_DBNAME))#g' \
++		$(TARGET_DIR)/usr/bin/hc-db-init.sh
++	$(SED) 's#@PGUSER@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_POSTGRES_USER))#g' \
++		$(TARGET_DIR)/usr/bin/hc-db-init.sh
++	$(SED) 's#@PGPASSWORD@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_POSTGRES_PASSWORD))#g' \
++		$(TARGET_DIR)/usr/bin/hc-db-init.sh
++endef
++HC_POST_INSTALL_TARGET_HOOKS += HC_INSTALL_DB_ASSETS
++
++define HC_INSTALL_CONFIG
++	$(INSTALL) -d $(HC_CONF_DIR)
++
++	$(HOST_DIR)/bin/openssl req -x509 -nodes -newkey rsa:2048 \
++		-keyout $(HC_CONF_DIR)/buildroot.key \
++		-out $(HC_CONF_DIR)/buildroot.crt \
++		-days 3650 \
++		-subj "/CN=$(BR2_PACKAGE_HC_CFG_CERT_CN)"
++
++	chmod 0600 $(HC_CONF_DIR)/buildroot.key
++	chmod 0644 $(HC_CONF_DIR)/buildroot.crt
++
++	$(INSTALL) -m 0644 $(HC_PKGDIR)/hc-config.json.in \
++		$(HC_CONF_DIR)/hc-config.json
++	$(INSTALL) -m 0644 $(HC_PKGDIR)/hc-db-init.sh.in \
++		$(HC_CONF_DIR)/hc-db-init.sh
++
++
++
++	$(SED) 's#@INGEST_CLEAR_PORT@#$(BR2_PACKAGE_HC_CFG_INGEST_CLEAR_PORT)#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@INGEST_TLS_PORT@#$(BR2_PACKAGE_HC_CFG_INGEST_TLS_PORT)#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@HTTP_PORT@#$(BR2_PACKAGE_HC_CFG_HTTP_PORT)#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@HTTPS_PORT@#$(BR2_PACKAGE_HC_CFG_HTTPS_PORT)#g' \
++		$(HC_CONF_DIR)/hc-config.json
++
++	$(SED) 's#@PGHOST@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_POSTGRES_HOST))#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@PGPORT@#$(BR2_PACKAGE_HC_CFG_POSTGRES_PORT)#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@PGUSER@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_POSTGRES_USER))#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@PGPASSWORD@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_POSTGRES_PASSWORD))#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@PGDATABASE@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_POSTGRES_DBNAME))#g' \
++		$(HC_CONF_DIR)/hc-config.json
++
++	$(SED) 's#@TENANT_ID@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_DEFAULT_TENANT_ID))#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@TENANT_NAME@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_TENANT_NAME))#g' \
++		$(HC_CONF_DIR)/hc-config.json
++	$(SED) 's#@APIKEY_PEPPER@#$(call qstrip,$(BR2_PACKAGE_HC_CFG_APIKEY_PEPPER))#g' \
++		$(HC_CONF_DIR)/hc-config.json
++endef
++HC_POST_INSTALL_TARGET_HOOKS += HC_INSTALL_CONFIG
++
++define HC_INSTALL_INIT_SYSV
++	$(INSTALL) -D -m 0755 $(HC_PKGDIR)/S60hc \
++		$(TARGET_DIR)/etc/init.d/S60hc
++	$(INSTALL) -D -m 0755 $(HC_PKGDIR)/S59hc-init \
++		$(TARGET_DIR)/etc/init.d/S59hc-init
++endef
++
++$(eval $(golang-package))
+diff --git a/package/hc/seed.sql.in b/package/hc/seed.sql.in
+new file mode 100644
+index 00000000..4622d6f8
+--- /dev/null
++++ b/package/hc/seed.sql.in
+@@ -0,0 +1,9 @@
++insert into tenants values ('@TENANT_ID@', 'default')
++on conflict do nothing;
++
++insert into app_users (id, tenant_id, username, created_at)
++values ('00000000-0000-0000-0000-000000000001',
++        '@TENANT_ID@',
++        'default_user',
++        now())
++on conflict do nothing;

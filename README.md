@@ -2,21 +2,21 @@
 **The "Boring" Shell History Sink for Distributed Fleets.**
 
 `hc` is a lightweight service that centralizes shell history from across
-your infrastructure into a PostgreSQL backend. 
+your infrastructure into a SQL backend.
 
 ### Why hc?
 If you manage 50+ servers, your shell history is fragmented. Finding
 "that one command that worked" usually involves a dozen SSH sessions and
-a lot of grep. 
+a lot of grep.
 
 `hc` solves this by providing a centralized, multi-tenant sink that is:
 * **Agentless:** Only requires `curl`, `wget`, or `socat` on the client.
    No binaries to install on production nodes.
-* **SSL-Native:** Secure ingestion via TLS with support for Client 
+* **SSL-Native:** Secure ingestion via TLS with support for Client
   Certificate and API Key authentication.
-* **Grep-Friendly:** Fetch your history as plaintext via `HTTPS` and 
+* **Grep-Friendly:** Fetch your history as plaintext via `HTTPS` and
   pipe it directly into your local tools.
-* **Multi-tenant:** Isolate history by team or environment using API 
+* **Multi-tenant:** Isolate history by team or environment using API
   keys.
 
 More on this story on this [article](https://carminatialessandro.blogspot.com/2026/01/hc-agentless-multi-tenant-shell-history.html) from my blog.
@@ -28,7 +28,7 @@ More on this story on this [article](https://carminatialessandro.blogspot.com/20
                          |
                          +-- spool file (append-only, per-tenant)
                          |
-                         +-- PostgreSQL (authoritative storage)
+                         +-- SQL (authoritative storage)
                                 |
                                 +-- HTTP(S) export (text)
 ```
@@ -187,8 +187,7 @@ Output format mirrors the ingestion format for familiarity.
 * Export over HTTP / HTTPS
 * Authentication is **pluggable and ordered**
 * Tenants, ACLs, and auth are clearly separated
-(Postgres is currently the primary backend; SQLite support is planned as
-a lightweight alternative.)
+(Postgres and SQLite are currently the primary backend)
 
 ## Configuration File (`hc-config.json`)
 `hc` is configured using a single JSON configuration file.
@@ -205,7 +204,7 @@ At a high level:
     * Authentication methods (`auth`) are evaluated in order, and the first
       successful one assigns the tenant.
 * `tenants` defines known tenants, their identifiers, and optional ACL rules.
-* `db` specifies the database backend (currently PostgreSQL).
+* `dsn` specifies the database backend.
 * `tls` specifies certificate and key files used by TLS ingestion and HTTPS
   export.
 * `limits` defines safety limits (for example, maximum accepted line size).
@@ -216,18 +215,14 @@ and transport are configured separately to keep the model understandable and
 extensible. A full example configuration is provided in
 `hc-config.json` and is meant to be copied and edited rather than generated.
 
-## Database Quick Start (PostgreSQL)
+## Database Quick Start
 
-`hc` uses PostgreSQL as its authoritative storage backend.
+`hc` uses a database as its authoritative storage backend.
 The schema is intentionally simple and append-only.
 
-To initialize the database:
-```
-createdb history
-psql history < pg_schema.sql
-```
+### Database creation and schema
 
-The schema (`pg_schema.sql`) creates:
+The default schema (`pg_schema.sql`, `schema.sqlite3.sql`) creates:
 
 * `tenants`: logical isolation units
 * `cmd_events`: all ingested commands (authoritative history)
@@ -245,17 +240,46 @@ The database is designed so that:
 * old data from text only storage <v0.1.19 can be exported, filtered, and
   reprocessed safely
 
-### Temporary `tenantID` and `userID` creation
+#### Postgresql
+To initialize the database:
+```
+createdb history
+psql history < pg_schema.sql
+```
 
-Since there's still no function to create tenants and users it must fall
-back to manual insertion into the database.
+#### SqLite
 
-Example
+To initialize the database:
+```
+$ sqlite3 test.db < schema.sqlite3.sql
+```
+
+### Filling Minimal data
+
+Since there's still no application logic that  create tenants and users it
+must fall back to manual insertion into the database.
+
+#### Postgresql
 
 ```
-insert into tenants values ('11111111-1111-1111-1111-111111111111', 'default');
-insert into app_users (id, tenant_id, username, created_at) values ('00000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'username', now());
+insert into tenants values ('11111111-1111-1111-1111-111111111111', 'default', now());
+insert into app_users (id, tenant_id, username, created_at) values ('00000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'default_user', now());
 ```
+
+#### SqLite
+
+```
+insert into tenants values ('11111111-1111-1111-1111-111111111111', 'default', date('now'));
+insert into app_users (id, tenant_id, username, created_at) values ('00000000-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111',  'default_user',date('now'));
+```
+
+### Configuration dsn
+
+| dbms     | dsn                                                                                     | Note                             |
+|----------|-----------------------------------------------------------------------------------------|----------------------------------|
+| Postgres | "dsn": "host=hc.example.com port=5432 user=user password=psw dbname=hc sslmode=disable" | Psql dsn has `host`, `port`, etc |
+| SqLite   | "dsn": "file:hc.db"                                                                     | Evrithing else is SqLite         |
+
 
 ## Handling Firewalls & NAT (The SSH Tunnel Method) Hack of the day
 
@@ -265,11 +289,11 @@ cannot "see" the hc collector directly.
 In the [example.bash](example.bash), there is a bootstrap script that:
 
 * Logs into the remote server via SSH.
-* Sets up a Reverse SSH Tunnel so the remote server can "talk back" to 
+* Sets up a Reverse SSH Tunnel so the remote server can "talk back" to
   your collector through the established SSH connection.
 * Installs the `PROMPT_COMMAND` hook automatically.
 
-This allows you to collect history from servers that have zero inbound 
+This allows you to collect history from servers that have zero inbound
 or outbound access to the collector's network, as long as you can SSH into
 them from your workstation without leaving a single byte of configuration
 on the remote host.
@@ -279,7 +303,7 @@ on the remote host.
 `hc` can encrypt command lines at rest using tenant-specific asymmetric
 encryption.
 
-When enabled, ingested commands for that tenant are encrypted before being 
+When enabled, ingested commands for that tenant are encrypted before being
 stored in PostgreSQL.
 
 This ensures:
@@ -306,7 +330,7 @@ No keys are persisted in memory after request completion.
 Add the following fields in the tenant definition:
 
 ```
-{ 
+{
   "tenantID": "00000000-1111-2222-3333-444444444444",
   "tenant_name": "tenant1",
   "acl": "tenant1_acl",
@@ -314,7 +338,7 @@ Add the following fields in the tenant definition:
   "pub_key": "<base64_public_key>"
 }
 ```
-￼
+
 Fields
 | Field     | Description                                   |
 |-----------|-----------------------------------------------|
@@ -335,9 +359,12 @@ private_key: <base64_private_key>
 To decrypt during export:
 
 ```
-wget "https://hc.example.com:8443/export?grep1=make&key=<base64_private_key>" -O - -q
+wget "https://hc.example.com:8443/export?session=123456&key=<base64_private_key>" -O - -q
 
 ```
+As for now, if data is encrypted, only `session` filtering is available at
+application level. But please note, you can always `grep` it. :-)
+
 If:
 
 * key is missing
@@ -372,7 +399,7 @@ This preserves:
 * [OK] Text export over HTTP
 * [OK] HTTPS export auth (client certs, API keys)
 * [OK] Encrypted Database
-* [WIP] SQLite support
+* [OK] SQLite support
 * [WIP] Web UI (optional, not a priority)
 
 ## Philosophy

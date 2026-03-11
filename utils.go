@@ -32,12 +32,6 @@ type Event struct {
 	ParseOK   bool
 }
 
-type StreamExportOptions struct {
-	TenantID  string
-	Limit     int
-	BatchSize int
-}
-
 func getRuntimeConf(version string, args []string) (*Options, error) {
 	debugPrint(log.Printf, levelCrazy, "Args=%s, %v\n", version, args)
 	cl, err := ParseCommandLine(args)
@@ -191,3 +185,9 @@ func nullTime(t *time.Time) sql.NullTime {
 	}
 }
 
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

@@ -2,24 +2,24 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
-	"io"
 	"log"
-	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
-	"context"
 )
 
 type SQLiteDB struct {
 	SQL *sql.DB
 }
 
-func OpenSQLiteDB(path string) (*SQLiteDB, error) {
+func OpenSQLiteDB(ctx context.Context, path string) (*SQLiteDB, error) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", path)
 
 	db, err := sql.Open("sqlite3", path)
@@ -29,6 +29,13 @@ func OpenSQLiteDB(path string) (*SQLiteDB, error) {
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(30 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("db ping: %w", err)
+	}
 
 	return &SQLiteDB{SQL: db}, nil
 }
@@ -197,102 +204,6 @@ func (d *SQLiteDB) ImportHistoryFile(ctx context.Context, tenantID, path string)
 	return inserted, skipped, nil
 }
 
-func (d *SQLiteDB) StreamExport(ctx context.Context, w io.Writer, flusher http.Flusher, opt StreamExportOptions) error {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %v, %v, %v\n", ctx, w, flusher, opt)
-	if d == nil || d.SQL == nil {
-		return fmt.Errorf("db not initialized")
-	}
-	tenantID := strings.TrimSpace(opt.TenantID)
-	if tenantID == "" {
-		return fmt.Errorf("tenant_id is required")
-	}
-
-	limit := opt.Limit
-	if limit <= 0 {
-		limit = 200000
-	}
-	batch := opt.BatchSize
-	if batch <= 0 {
-		batch = 5000
-	}
-	if batch > limit {
-		batch = limit
-	}
-
-	var (
-		lastID  *int64
-		written int
-	)
-
-	for written < limit {
-		rows, err := d.SQL.QueryContext(ctx, `
-			select id, ts_client, ts_ingested, session_id, host_fqdn, cwd, cmd, raw_line
-			from cmd_events
-			where tenant_id = $1
-			  and ($2::bigint is null or id < $2)
-			order by id desc
-			limit $3
-		`, tenantID, lastID, batch)
-		if err != nil {
-			return fmt.Errorf("export query: %w", err)
-		}
-
-		n := 0
-		for rows.Next() {
-			n++
-
-			var (
-				id         int64
-				tsClient   sql.NullTime
-				tsIngested time.Time
-				sessionID  sql.NullString
-				host       sql.NullString
-				cwd        sql.NullString
-				cmd        sql.NullString
-				raw        string
-			)
-
-			if err := rows.Scan(&id, &tsClient, &tsIngested, &sessionID, &host, &cwd, &cmd, &raw); err != nil {
-				_ = rows.Close()
-				return fmt.Errorf("export scan: %w", err)
-			}
-
-			line := formatExportLine(tsClient, tsIngested, sessionID, host, cwd, cmd, raw)
-			if _, err := io.WriteString(w, line+"\n"); err != nil {
-				_ = rows.Close()
-				return fmt.Errorf("export write: %w", err)
-			}
-
-			lastID = &id
-			written++
-			if written >= limit {
-				break
-			}
-		}
-
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("export rows: %w", err)
-		}
-		_ = rows.Close()
-
-		if flusher != nil {
-			flusher.Flush()
-		}
-
-		if n == 0 {
-			return nil
-		}
-
-		remaining := limit - written
-		if remaining < batch {
-			batch = remaining
-		}
-	}
-
-	return nil
-}
-
 func (d *SQLiteDB) MaxSeq(ctx context.Context, tenantID string) (int64, error) {
 	var seq sql.NullInt64
 	debugPrint(log.Printf, levelDebug, "Args: %v, %s\n", ctx, tenantID)
@@ -316,19 +227,20 @@ func (d *SQLiteDB) InsertEventWithSeq(ctx context.Context, ev Event, seq int64) 
 	CWD := nullString(ev.CWD)
 	Cmd := nullString(ev.Cmd)
 	SrcIP := nullString(ev.SrcIP)
-	u, err := uuid.Parse(ev.TenantID)
+	_, err := uuid.Parse(ev.TenantID)
 	if err != nil {
 		return err
 	}
 
+//	debugPrint(log.Printf, levelDebug, "insert into cmd_events (tenant_id, ts_client, session_id, host_fqdn, cwd, cmd, raw_line, src_ip, transport, parse_ok) values (%v. %d, 
 	_, err = d.SQL.ExecContext(ctx, `
 		insert into cmd_events
-			(tenant_id, ts_client, session_id, host_fqdn, cwd, cmd, raw_line, src_ip, transport, parse_ok)
+			(tenant_id, seq, ts_client, session_id, host_fqdn, cwd, cmd, raw_line, src_ip, transport, parse_ok)
 		values
-			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		on conflict (tenant_id, seq) do nothing
 	`,
-		u,
+		ev.TenantID,
 		seq,
 		&TSClient,
 		ev.SessionID,
@@ -370,4 +282,158 @@ func (d *SQLiteDB) insertAPIKey(ctx context.Context, id uuid.UUID, tenant uuid.U
 		values ($1,$2,$3,$4,$5)
 	`, id, tenant, user, keyID, keyHash)
 	return err
+}
+
+func (db *SQLiteDB) RequireTenantExists(ctx context.Context, tenantID uuid.UUID) error {
+	var tmp string
+	err := db.SQL.QueryRowContext(
+		ctx,
+		`select id from tenants where id = ?`,
+		tenantID.String(),
+	).Scan(&tmp)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("tenant %s not found in tenants table", tenantID.String())
+	}
+	return err
+}
+
+func (db *SQLiteDB) GetAPIKeyByKeyID(ctx context.Context, keyID string) (APIKeyRecord, bool, error) {
+	var info APIKeyRecord
+	var tenantText string
+
+	debugPrint(log.Printf, levelDebug, "Args: %v, %s\n", ctx, keyID)
+	err := db.SQL.QueryRowContext(ctx, `
+		select tenant_id, key_hash, revoked_at
+		from api_keys
+		where key_id = ?
+	`, keyID).Scan(&tenantText, &info.KeyHash, &info.Revoked)
+
+	debugPrint(log.Printf, levelDebug, "info: %v\n", info)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return APIKeyRecord{}, false, nil
+	}
+	if err != nil {
+		return APIKeyRecord{}, false, err
+	}
+
+	_, err = uuid.Parse(tenantText)
+	if err != nil {
+		return APIKeyRecord{}, false, fmt.Errorf("parse tenant_id: %w", err)
+	}
+	info.TenantID = tenantText
+
+	return info, true, nil
+}
+
+func (db *SQLiteDB) ExportLines(ctx context.Context, tenantID string, q exportQuery) ([]string, error) {
+	orderSQL, err := exportOrderSQLSQLite(q.Order)
+	if err != nil {
+		return nil, err
+	}
+
+	var grep1Re *regexp.Regexp
+	useRegex1 := false
+
+	g1 := strings.TrimSpace(q.Grep1)
+	if g1 != "" && !IsPlainSubstring(g1) {
+		grep1Re, err = regexp.Compile("(?i)" + g1)
+		if err != nil {
+			return nil, err
+		}
+		useRegex1 = true
+	}
+
+	var sb strings.Builder
+	args := make([]any, 0, 4)
+
+	// Select cmd too, so substring filtering can work on both raw_line and cmd
+	// and regex fallback can still inspect raw_line only.
+	sb.WriteString(`
+		select raw_line, cmd
+		from cmd_events
+		where tenant_id = ?
+	`)
+	args = append(args, tenantID)
+
+	if q.Session != "" {
+		sb.WriteString(` and session_id = ?`)
+		args = append(args, q.Session)
+	}
+
+	// Plain substring grep can be done in SQL.
+	if g1 != "" && !useRegex1 {
+		sb.WriteString(` and (lower(raw_line) like lower(?) or lower(cmd) like lower(?))`)
+		pat := "%" + g1 + "%"
+		args = append(args, pat, pat)
+	}
+
+	sb.WriteString(` order by `)
+	sb.WriteString(orderSQL)
+
+	// Only push LIMIT into SQL when all filtering is done there.
+	// If regex filtering happens in Go, applying SQL LIMIT first would change semantics.
+	if !useRegex1 && q.Limit > 0 {
+		sb.WriteString(` limit ?`)
+		args = append(args, q.Limit)
+	}
+
+	debugPrint(log.Printf, levelDebug, "sqlite export sql=%s args=%s\n", sb.String(), safeJSON(args))
+
+	rows, err := db.SQL.QueryContext(ctx, sb.String(), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]string, 0, minInt(q.Limit, 256))
+	for rows.Next() {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		var rawLine string
+		var cmd sql.NullString
+
+		if err := rows.Scan(&rawLine, &cmd); err != nil {
+			return nil, err
+		}
+
+		// Regex fallback in Go.
+		if useRegex1 && !grep1Re.MatchString(rawLine) {
+			continue
+		}
+
+		out = append(out, rawLine)
+
+		// When regex filtering is done in Go, enforce the effective limit here.
+		if useRegex1 && q.Limit > 0 && len(out) >= q.Limit {
+			break
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func exportOrderSQLSQLite(order string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(order)) {
+	case "ingest_asc":
+		return "id asc", nil
+	case "ingest_desc":
+		return "id desc", nil
+	case "client_asc":
+		return "ts_client asc", nil
+	case "client_desc":
+		return "ts_client desc", nil
+
+	default:
+		return "", fmt.Errorf("invalid order %q", order)
+	}
 }

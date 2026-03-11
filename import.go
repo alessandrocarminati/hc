@@ -23,8 +23,8 @@ func doImport(version string, args []string) {
 		os.Exit(2)
 	}
 
-	if opts.Cfg.DB.PostgresDSN == "" {
-		fmt.Fprintln(os.Stderr, "postgres_dsn must be set in config for import")
+	if opts.Cfg.DB.DSN == "" {
+		fmt.Fprintln(os.Stderr, "dsn must be set in config for import")
 		os.Exit(2)
 	}
 
@@ -32,7 +32,7 @@ func doImport(version string, args []string) {
 
 	ctx := context.Background()
 
-	db, err := OpenDB(ctx, opts.Cfg.DB.PostgresDSN)
+	db, err := OpenDB(ctx, opts.Cfg.DB.DSN)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

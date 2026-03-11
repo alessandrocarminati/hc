@@ -56,7 +56,7 @@ func (a AuthMode) Valid() bool {
 }
 
 type DBConfig struct {
-	PostgresDSN string `json:"postgres_dsn"`
+	DSN string `json:"dsn"`
 }
 
 type ACL struct {
@@ -223,8 +223,8 @@ func (c Config) validate() error {
 	}
 
 	// DB
-	if strings.TrimSpace(c.DB.PostgresDSN) == "" {
-		return errors.New("db.postgres_dsn is required")
+	if strings.TrimSpace(c.DB.DSN) == "" {
+		return errors.New("db.dsn is required")
 	}
 
 	return nil

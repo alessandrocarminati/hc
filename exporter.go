@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -18,13 +17,13 @@ import (
 
 type ExportService struct {
 	Opts *Options
-	DB   *DB
+	DB   DBInterface
 }
 
-func RegisterExportHandlers(mux *http.ServeMux, opts *Options, db *DB) {
+func RegisterExportHandlers(mux *http.ServeMux, opts *Options, db DBInterface) {
 	s := &ExportService{Opts: opts, DB: db}
 
-	mux.HandleFunc("/export", s.handleExportUnsecure)
+	mux.HandleFunc("/export", s.handleExport)
 
 	mux.HandleFunc("/web_app", func(w http.ResponseWriter, r *http.Request) {
 		debugPrint(log.Printf, levelInfo, "Wip /web_app page reached!\n")
@@ -96,35 +95,25 @@ func (s *ExportService) getTenantFromHTTPAPI(msg *http.Request) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	var (
-		tenantID string
-		keyHash  string
-		revoked  sql.NullTime
-	)
+	rec, ok, err := s.DB.GetAPIKeyByKeyID(ctx, keyID)
 
-	err := s.DB.SQL.QueryRowContext(ctx, `
-		select tenant_id::text, key_hash, revoked_at
-		from api_keys
-		where key_id = $1
-	`, keyID).Scan(&tenantID, &keyHash, &revoked)
-
-	if err != nil {
+	if err != nil || !ok {
 		return ""
 	}
 
-	if revoked.Valid {
+	if rec.Revoked.Valid {
 		debugPrint(log.Printf, levelDebug, "key explicitly revoked\n")
 		return ""
 	}
 
 	debugPrint(log.Printf, levelDebug, "Verify secret\n")
 	pepper := strings.TrimSpace(s.Opts.Cfg.Globals.Pepper)
-	if !verifySecretSHA256(secret, pepper, keyHash) {
+	if !verifySecretSHA256(secret, pepper, rec.KeyHash) {
 		return ""
 	}
 
 	debugPrint(log.Printf, levelDebug, "SUCCESS: authenticated, tenant resolved\n")
-	return tenantID
+	return rec.TenantID
 }
 
 func (s *ExportService) getTenantFromHTTPSCert(r *http.Request) string {
@@ -197,7 +186,7 @@ func (s *ExportService) getTenant(msg *http.Request) string {
 	return ""
 }
 
-func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Request) {
+func (s *ExportService) handleExport(w http.ResponseWriter, r *http.Request) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %v\n", w, r)
 	if r.Method != http.MethodGet {
 		debugPrint(log.Printf, levelInfo, "not allowed method request form %s\n", getIP(r))
@@ -207,7 +196,7 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 	}
 
 	if !s.Opts.Cfg.Server.IngestClear.Enabled {
-		http.Error(w, "export_unsecure disabled", http.StatusNotFound)
+		http.Error(w, "export disabled", http.StatusNotFound)
 		return
 	}
 
@@ -228,7 +217,7 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 	tenantID := s.getTenant(r)
 	if tenantID == "" {
 		debugPrint(log.Printf, levelError, "no default tenantID\n")
-		http.Error(w, "export_unsecure no default tenantID", http.StatusInternalServerError)
+		http.Error(w, "export no default tenantID", http.StatusInternalServerError)
 		return
 	}
 
@@ -254,22 +243,25 @@ func (s *ExportService) handleExportUnsecure(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 
-	flusher, _ := w.(http.Flusher)
-
-	rows, err := s.queryExportRows(ctx, tenantID, q)
+	lines, err := s.DB.ExportLines(ctx, tenantID, q)
 	if err != nil {
-		log.Printf("export_unsecure query failed: %v", err)
+		log.Printf("export query failed: %v", err)
 		http.Error(w, "export query failed", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
 
-	encErr := streamRowsAsText(ctx, w, flusher, rows, pipe, q.Key)
-	if encErr != nil {
-		if !errors.Is(encErr, context.Canceled) && !errors.Is(encErr, context.DeadlineExceeded) {
-			log.Printf("export_unsecure stream error: %v", encErr)
+	textLines, err := linesToText(ctx, lines, pipe, q.Key)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("export stream error: %v", err)
 		}
 		return
+	}
+
+	for _, line := range textLines {
+		if _, err := io.WriteString(w, line+"\n"); err != nil {
+			return
+		}
 	}
 }
 
@@ -317,59 +309,40 @@ func parseExportQuery(r *http.Request, maxRows int) (exportQuery, error) {
 	return q, nil
 }
 
-func (s *ExportService) queryExportRows(ctx context.Context, tenantID string, q exportQuery) (*sql.Rows, error) {
-	orderSQL, err := exportOrderSQL(q.Order)
-	if err != nil {
-		return nil, err
-	}
+func linesToText(ctx context.Context, lines []string, pipe *GrepPipeline, key string) ([]string, error) {
+	out := make([]string, 0, len(lines))
 
-	sb := strings.Builder{}
-	args := []any{}
-	argN := 1
-
-	sb.WriteString(`select raw_line
-		from cmd_events
-		where tenant_id = $`)
-	sb.WriteString(strconv.Itoa(argN))
-	args = append(args, tenantID)
-	argN++
-
-	if q.Session != "" {
-		sb.WriteString(` and session_id = $`)
-		sb.WriteString(strconv.Itoa(argN))
-		args = append(args, q.Session)
-		argN++
-	}
-
-	g1 := strings.TrimSpace(q.Grep1)
-	if g1 != "" {
-		if IsPlainSubstring(g1) {
-			sb.WriteString(` and (raw_line ilike $`)
-			sb.WriteString(strconv.Itoa(argN))
-			sb.WriteString(` or cmd ilike $`)
-			sb.WriteString(strconv.Itoa(argN))
-			sb.WriteString(`)`)
-			args = append(args, "%"+g1+"%")
-			argN++
-		} else {
-			sb.WriteString(` and raw_line ~* $`)
-			sb.WriteString(strconv.Itoa(argN))
-			args = append(args, g1)
-			argN++
+	for _, rawLine := range lines {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
 		}
+
+		line := strings.TrimRight(rawLine, "\r\n")
+		if !pipe.Match(line) {
+			continue
+		}
+
+		if key != "" {
+			privKey, err := base64.StdEncoding.DecodeString(key)
+			if err == nil {
+				decr, err := decryptString(line, privKey)
+				if err == nil {
+					line = decr
+				}
+			}
+		}
+
+		if pipe.ColorEnabled() {
+			line = pipe.Highlight(line)
+		}
+
+		out = append(out, line)
 	}
 
-	sb.WriteString(` order by `)
-	sb.WriteString(orderSQL)
-	sb.WriteString(` limit $`)
-	sb.WriteString(strconv.Itoa(argN))
-	args = append(args, q.Limit)
-
-	debugPrint(log.Printf, levelDebug, "export sql=%s args=%s\n", sb.String(), safeJSON(args))
-
-	return s.DB.SQL.QueryContext(ctx, sb.String(), args...)
+	return out, nil
 }
-
 func exportOrderSQL(order string) (string, error) {
 	switch order {
 	case "ingest_desc":
@@ -385,70 +358,71 @@ func exportOrderSQL(order string) (string, error) {
 	}
 }
 
-func streamRowsAsText(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, rows *sql.Rows, pipe *GrepPipeline, key string) error {
-	const flushEvery = 200
-	n := 0
+/*
+	func streamRowsAsText(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, rows *sql.Rows, pipe *GrepPipeline, key string) error {
+		const flushEvery = 200
+		n := 0
 
-	debugPrint(log.Printf, levelCrazy, "processing text with key='%s'\n", key)
+		debugPrint(log.Printf, levelCrazy, "processing text with key='%s'\n", key)
 
-	for rows.Next() {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
+		for rows.Next() {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
 
-		var rawLine string
-		if err := rows.Scan(&rawLine); err != nil {
-			return err
-		}
+			var rawLine string
+			if err := rows.Scan(&rawLine); err != nil {
+				return err
+			}
 
-		line := strings.TrimRight(rawLine, "\r\n")
-		if !pipe.Match(line) {
-			continue
-		}
+			line := strings.TrimRight(rawLine, "\r\n")
+			if !pipe.Match(line) {
+				continue
+			}
 
-		if key != "" {
-			for {
-				debugPrint(log.Printf, levelCrazy, "Decrypt '%s' using '%s'\n", line, key)
-				PrivKey, err := base64.StdEncoding.DecodeString(key)
-				if err != nil {
-					debugPrint(log.Printf, levelWarning, "Ecryption key does not work(%v), fallback unencrypted.\n", err)
+			if key != "" {
+				for {
+					debugPrint(log.Printf, levelCrazy, "Decrypt '%s' using '%s'\n", line, key)
+					PrivKey, err := base64.StdEncoding.DecodeString(key)
+					if err != nil {
+						debugPrint(log.Printf, levelWarning, "Ecryption key does not work(%v), fallback unencrypted.\n", err)
+						break
+					}
+					decr, err := decryptString(line, PrivKey)
+					if err != nil {
+						debugPrint(log.Printf, levelWarning, "Ecryption key can not decrypt(%v), fallback unencrypted.\n", err)
+						break
+					}
+					line = decr
 					break
 				}
-				decr, err := decryptString(line, PrivKey)
-				if err != nil {
-					debugPrint(log.Printf, levelWarning, "Ecryption key can not decrypt(%v), fallback unencrypted.\n", err)
-					break
-				}
-				line = decr
-				break
+			}
+
+			if pipe.ColorEnabled() {
+				line = pipe.Highlight(line)
+			}
+
+			if _, err := io.WriteString(w, line+"\n"); err != nil {
+				return err
+			}
+
+			n++
+			if flusher != nil && (n%flushEvery) == 0 {
+				flusher.Flush()
 			}
 		}
 
-		if pipe.ColorEnabled() {
-			line = pipe.Highlight(line)
-		}
-
-		if _, err := io.WriteString(w, line+"\n"); err != nil {
+		if err := rows.Err(); err != nil {
 			return err
 		}
-
-		n++
-		if flusher != nil && (n%flushEvery) == 0 {
+		if flusher != nil {
 			flusher.Flush()
 		}
+		return nil
 	}
-
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	if flusher != nil {
-		flusher.Flush()
-	}
-	return nil
-}
-
+*/
 func safeJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)

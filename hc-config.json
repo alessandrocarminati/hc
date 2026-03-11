@@ -33,7 +33,7 @@
     }
   },
   "db": {
-    "postgres_dsn": "host=dbs.hqhome163.com port=5432 user=alessandro password=<password> dbname=history sslmode=disable"
+    "dsn": "file:test.db"
   },
   "acl": [
     {

@@ -30,7 +30,7 @@
     }
   },
   "db": {
-    "postgres_dsn": "host=${db_host} port=${db_port} user=${db_user} password=${db_password} dbname=history sslmode=${db_ssl_mode}"
+    "dsn": "host=${db_host} port=${db_port} user=${db_user} password=${db_password} dbname=history sslmode=${db_ssl_mode}"
   },
   "acl": [
     {

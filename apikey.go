@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -37,7 +35,7 @@ func CreateAPIKey(opts *Options) error {
 	ctx := context.Background()
 
 	debugPrint(log.Printf, levelDebug, "connect db\n")
-	db, err := OpenDB(ctx, opts.Cfg.DB.PostgresDSN)
+	db, err := OpenDB(ctx, opts.Cfg.DB.DSN)
 
 	if err != nil {
 		return err
@@ -48,7 +46,7 @@ func CreateAPIKey(opts *Options) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := ensureTenantExists(ctx, db.SQL, opts.AKTenantID); err != nil {
+	if err := db.RequireTenantExists(ctx, opts.AKTenantID); err != nil {
 		return err
 	}
 
@@ -92,15 +90,6 @@ PRINT:
 	fmt.Printf("api_key:   %s\n", apiKey)
 	fmt.Println("note: api_key is shown only now; store it safely.")
 	return nil
-}
-
-func ensureTenantExists(ctx context.Context, db *sql.DB, tenant uuid.UUID) error {
-	var tmp uuid.UUID
-	err := db.QueryRowContext(ctx, `select id from tenants where id = $1`, tenant).Scan(&tmp)
-	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("apikey: tenant %s not found in tenants table", tenant.String())
-	}
-	return err
 }
 
 func generateKeyID() (string, error) {

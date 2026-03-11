@@ -86,7 +86,7 @@ type IngestConfig struct {
 
 type IngestService struct {
 	cfg       IngestConfig
-	db        *DB
+	db        DBInterface
 	authFuncs map[string]authFunc
 
 	// channels between stages
@@ -178,11 +178,11 @@ func SetupIngestionWithConfig(parent context.Context, cfg IngestConfig) (*Ingest
 		cancel:  cancel,
 	}
 
-	if strings.TrimSpace(cfg.AppCfg.DB.PostgresDSN) != "" {
+	if strings.TrimSpace(cfg.AppCfg.DB.DSN) != "" {
 		dbCtx, dbCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer dbCancel()
 
-		db, err := OpenDB(dbCtx, cfg.AppCfg.DB.PostgresDSN)
+		db, err := OpenDB(dbCtx, cfg.AppCfg.DB.DSN)
 		if err != nil {
 			if cfg.DBRequired {
 				cancel()
@@ -873,13 +873,6 @@ func readAllLimit(r io.Reader, limit int) ([]byte, bool, error) {
 	}
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func peerAddrIP(a net.Addr) netip.Addr {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", a)
 
@@ -898,12 +891,12 @@ type ensureSchemaFn func(context.Context) error
 type insertEventWithSeqFn func(context.Context, Event, int64) error
 type maxSeqFn func(context.Context, string) (int64, error)
 
-func getEnsureSchemaFn(db *DB) ensureSchemaFn {
+func getEnsureSchemaFn(db DBInterface) ensureSchemaFn {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", db)
 	return nil
 }
 
-func getInsertEventWithSeqFn(db *DB) insertEventWithSeqFn {
+func getInsertEventWithSeqFn(db DBInterface) insertEventWithSeqFn {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", db)
 	if db == nil {
 		debugPrint(log.Printf, levelError, "No DB: failing.\n")
@@ -912,7 +905,7 @@ func getInsertEventWithSeqFn(db *DB) insertEventWithSeqFn {
 	return db.InsertEventWithSeq
 }
 
-func getMaxSeqFn(db *DB) maxSeqFn {
+func getMaxSeqFn(db DBInterface) maxSeqFn {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", db)
 	if db == nil {
 		debugPrint(log.Printf, levelError, "No DB: failing.\n")

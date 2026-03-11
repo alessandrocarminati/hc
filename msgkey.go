@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
-	"database/sql"
 	"encoding/hex"
 	"log"
 	"regexp"
@@ -59,33 +58,29 @@ func (s *IngestService) authAPIKeyFromLine(msg *RawMsg) *Tenant {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	var (
-		tenantID string
-		keyHash  string
-		revoked  sql.NullTime
-	)
+	rec, ok, err := s.db.GetAPIKeyByKeyID(ctx, keyID)
 
-	err := s.db.SQL.QueryRowContext(ctx, `
-		select tenant_id::text, key_hash, revoked_at
-		from api_keys
-		where key_id = $1
-	`, keyID).Scan(&tenantID, &keyHash, &revoked)
-	if err != nil {
+	if err != nil || !ok {
 		return nil
 	}
-	if revoked.Valid {
+
+	debugPrint(log.Printf, levelCrazy, "rec.TenantID='%s', KeyHash='%s', Revoked='%v'\n", rec.TenantID, rec.KeyHash, rec.Revoked)
+
+	if rec.Revoked.Valid {
+		debugPrint(log.Printf, levelDebug, "key explicitly revoked\n")
 		return nil
 	}
+
 	debugPrint(log.Printf, levelCrazy, "Key_id exists\n")
 
 	pepper := s.cfg.AppCfg.Globals.Pepper
-	if !verifySecretSHA256(secret, pepper, keyHash) {
+	if !verifySecretSHA256(secret, pepper, rec.KeyHash) {
 		return nil
 	}
 
-	debugPrint(log.Printf, levelCrazy, "msg =%v\n", msg)
+	debugPrint(log.Printf, levelCrazy, "tenant=%s, msg=%v\n", rec.TenantID, msg)
 
-	return s.getTenantPTR(tenantID)
+	return s.getTenantPTR(rec.TenantID)
 }
 
 func separatePayloadStrict(line string) (string, string, bool) {

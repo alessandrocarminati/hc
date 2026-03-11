@@ -221,7 +221,7 @@ index 00000000..a017c766
 +    }
 +  },
 +  "db": {
-+    "postgres_dsn": "host=@PGHOST@ port=@PGPORT@ user=@PGUSER@ password=@PGPASSWORD@ dbname=@PGDATABASE@ sslmode=disable"
++    "dsn": "host=@PGHOST@ port=@PGPORT@ user=@PGUSER@ password=@PGPASSWORD@ dbname=@PGDATABASE@ sslmode=disable"
 +  },
 +  "acl": [
 +    {

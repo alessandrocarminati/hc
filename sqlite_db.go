@@ -2,30 +2,27 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"database/sql"
 	"fmt"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+	"context"
 )
 
-type DB struct {
+type SQLiteDB struct {
 	SQL *sql.DB
 }
 
-func OpenDB(ctx context.Context, dsn string) (*DB, error) {
-	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", ctx, dsn)
+func OpenSQLiteDB(path string) (*SQLiteDB, error) {
+	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", path)
 
-	if strings.TrimSpace(dsn) == "" {
-		return nil, fmt.Errorf("invalid postgres dsn")
-	}
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, fmt.Errorf("sql open: %w", err)
 	}
@@ -33,17 +30,10 @@ func OpenDB(ctx context.Context, dsn string) (*DB, error) {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(30 * time.Minute)
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("db ping: %w", err)
-	}
-
-	return &DB{SQL: db}, nil
+	return &SQLiteDB{SQL: db}, nil
 }
 
-func (d *DB) Close() error {
+func (d *SQLiteDB) Close() error {
 	debugPrint(log.Printf, levelCrazy, "Args=none\n")
 	if d == nil || d.SQL == nil {
 		return nil
@@ -51,11 +41,9 @@ func (d *DB) Close() error {
 	return d.SQL.Close()
 }
 
-func (d *DB) EnsureSchema(ctx context.Context) error {
+func (d *SQLiteDB) EnsureSchema(ctx context.Context) error {
 	debugPrint(log.Printf, levelCrazy, "Args=%v\n", ctx)
 	stmts := []string{
-		`create extension if not exists pg_trgm;`,
-
 		`create table if not exists tenants (
 			id uuid primary key,
 			name text not null unique,
@@ -63,7 +51,7 @@ func (d *DB) EnsureSchema(ctx context.Context) error {
 		);`,
 
 		`create table if not exists cmd_events (
-			id bigserial primary key,
+			id integer primary key autoincrement,
 			tenant_id uuid not null references tenants(id),
 
 			ts_client timestamptz,
@@ -98,7 +86,7 @@ func (d *DB) EnsureSchema(ctx context.Context) error {
 	return nil
 }
 
-func (d *DB) EnsureTenant(ctx context.Context, tenantID, name string) error {
+func (d *SQLiteDB) EnsureTenant(ctx context.Context, tenantID, name string) error {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %s, %s\n", ctx, tenantID, name)
 	_, err := d.SQL.ExecContext(ctx,
 		`insert into tenants(id, name) values ($1, $2)
@@ -110,7 +98,7 @@ func (d *DB) EnsureTenant(ctx context.Context, tenantID, name string) error {
 	return nil
 }
 
-func (d *DB) GetTenantName(ctx context.Context, tenantID string) (string, bool, error) {
+func (d *SQLiteDB) GetTenantName(ctx context.Context, tenantID string) (string, bool, error) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %s\n", ctx, tenantID)
 	var name string
 	err := d.SQL.QueryRowContext(
@@ -128,7 +116,7 @@ func (d *DB) GetTenantName(ctx context.Context, tenantID string) (string, bool, 
 	return name, true, nil
 }
 
-func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inserted int, skipped int, err error) {
+func (d *SQLiteDB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inserted int, skipped int, err error) {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %s, %s\n", ctx, tenantID, path)
 	transport := "import"
 	f, err := os.Open(path)
@@ -149,9 +137,9 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 
 	stmt, err := tx.PrepareContext(ctx, `
 		insert into cmd_events(
-			seq, tenant_id, ts_client, session_id, host_fqdn, cwd, cmd, transport, raw_line, parse_ok
+			tenant_id, ts_client, session_id, host_fqdn, cwd, cmd, transport, raw_line, parse_ok
 		) values (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+			$1, $2, $3, $4, $5, $6, $7, $8, $9
 		);
 	`)
 	if err != nil {
@@ -164,13 +152,7 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 	buf := make([]byte, 0, 64*1024)
 	sc.Buffer(buf, 2*1024*1024)
 
-	seq, err := d.MaxSeq(ctx, tenantID)
-	if err != nil {
-		return 0, 0, fmt.Errorf("cant recover seq (%v)", err)
-	}
-
 	for sc.Scan() {
-		seq = seq + 1
 		line := strings.TrimRight(sc.Text(), "\r\n")
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -182,8 +164,7 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 		ev.SrcIP = &tmp
 
 		res, e := stmt.ExecContext(ctx,
-			seq,
-			ev.TenantID,
+			tenantID,
 			ev.TSClient,
 			ev.SessionID,
 			ev.HostFQDN,
@@ -216,7 +197,7 @@ func (d *DB) ImportHistoryFile(ctx context.Context, tenantID, path string) (inse
 	return inserted, skipped, nil
 }
 
-func (d *DB) StreamExport(ctx context.Context, w io.Writer, flusher http.Flusher, opt StreamExportOptions) error {
+func (d *SQLiteDB) StreamExport(ctx context.Context, w io.Writer, flusher http.Flusher, opt StreamExportOptions) error {
 	debugPrint(log.Printf, levelCrazy, "Args=%v, %v, %v, %v\n", ctx, w, flusher, opt)
 	if d == nil || d.SQL == nil {
 		return fmt.Errorf("db not initialized")
@@ -312,12 +293,12 @@ func (d *DB) StreamExport(ctx context.Context, w io.Writer, flusher http.Flusher
 	return nil
 }
 
-func (db *DB) MaxSeq(ctx context.Context, tenantID string) (int64, error) {
+func (d *SQLiteDB) MaxSeq(ctx context.Context, tenantID string) (int64, error) {
 	var seq sql.NullInt64
 	debugPrint(log.Printf, levelDebug, "Args: %v, %s\n", ctx, tenantID)
 
-	err := db.SQL.QueryRowContext(ctx, `
-		select max(seq) from cmd_events where tenant_id = $1
+	err := d.SQL.QueryRowContext(ctx, `
+		select max(id) from cmd_events where tenant_id = $1
 	`, tenantID).Scan(&seq)
 	if err != nil {
 		return 0, err
@@ -328,7 +309,7 @@ func (db *DB) MaxSeq(ctx context.Context, tenantID string) (int64, error) {
 	return seq.Int64, nil
 }
 
-func (db *DB) InsertEventWithSeq(ctx context.Context, ev Event, seq int64) error {
+func (d *SQLiteDB) InsertEventWithSeq(ctx context.Context, ev Event, seq int64) error {
 	debugPrint(log.Printf, levelDebug, "Args: %v, %v, %d\n", ctx, ev, seq)
 
 	TSClient := nullTime(ev.TSClient)
@@ -340,11 +321,11 @@ func (db *DB) InsertEventWithSeq(ctx context.Context, ev Event, seq int64) error
 		return err
 	}
 
-	_, err = db.SQL.ExecContext(ctx, `
+	_, err = d.SQL.ExecContext(ctx, `
 		insert into cmd_events
-			(tenant_id, seq, ts_client, session_id, host_fqdn, cwd, cmd, raw_line, src_ip, transport, parse_ok)
+			(tenant_id, ts_client, session_id, host_fqdn, cwd, cmd, raw_line, src_ip, transport, parse_ok)
 		values
-			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 		on conflict (tenant_id, seq) do nothing
 	`,
 		u,
@@ -362,13 +343,13 @@ func (db *DB) InsertEventWithSeq(ctx context.Context, ev Event, seq int64) error
 	return err
 }
 
-func (db *DB) lookupTenantByUsername(username string) (string, bool) {
+func (d *SQLiteDB) lookupTenantByUsername(username string) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	var tenantID string
 
-	err := db.SQL.QueryRowContext(ctx, `
+	err := d.SQL.QueryRowContext(ctx, `
 		select tenant_id::text
 		from app_users
 		where username = $1
@@ -382,9 +363,9 @@ func (db *DB) lookupTenantByUsername(username string) (string, bool) {
 	return strings.TrimSpace(tenantID), tenantID != ""
 }
 
-func (db *DB) insertAPIKey(ctx context.Context, id uuid.UUID, tenant uuid.UUID, user *uuid.UUID, keyID, keyHash string) error {
+func (d *SQLiteDB) insertAPIKey(ctx context.Context, id uuid.UUID, tenant uuid.UUID, user *uuid.UUID, keyID, keyHash string) error {
 	debugPrint(log.Printf, levelDebug, "insert into api_keys values ('%s', '%s', '%s', '%s', '%s', %s));\n", id.String(), tenant.String(), user.String(), keyID, keyHash, "1234")
-	_, err := db.SQL.ExecContext(ctx, `
+	_, err := d.SQL.ExecContext(ctx, `
 		insert into api_keys (id, tenant_id, user_id, key_id, key_hash)
 		values ($1,$2,$3,$4,$5)
 	`, id, tenant, user, keyID, keyHash)
